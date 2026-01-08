@@ -7,11 +7,17 @@ async function loadLink() {
     if (res.ok) {
         const data = await res.json();
         display.innerHTML = `<a href="${data.link}" target="_blank">${data.link}</a>`;
+    } else {
+        display.textContent = 'No link shared yet';
     }
 }
 
 // Share new link
 document.querySelector('#share-btn').onclick = async () => {
+    if (!input.value) {
+        alert('Please enter a link');
+        return;
+    }
     await fetch('/api/link', {
         method: 'POST',
         body: JSON.stringify({ link: input.value })
