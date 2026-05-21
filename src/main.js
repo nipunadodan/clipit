@@ -73,11 +73,9 @@ async function loadEntries() {
 pasteBtn.addEventListener('click', async () => {
     try {
         input.value = await navigator.clipboard.readText();
-        input.focus();
-    } catch {
-        input.focus();
-    }
-    updateButtonStates();
+    } catch {}
+    input.dispatchEvent(new Event('input'));
+    input.focus();
 });
 
 input.addEventListener('input', updateButtonStates);
@@ -93,7 +91,7 @@ saveBtn.addEventListener('click', async () => {
     });
     if (res.ok) {
         input.value = '';
-        updateButtonStates();
+        input.dispatchEvent(new Event('input'));
         const entries = await res.json();
         render(entries);
     }
@@ -142,4 +140,3 @@ clearBtn.addEventListener('click', async () => {
 });
 
 loadEntries();
-updateButtonStates();
