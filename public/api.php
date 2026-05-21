@@ -18,15 +18,27 @@ function query(string $sql, string $types = '', ...$params): mysqli_stmt {
     return $stmt;
 }
 
+function fetchLinks(string $table): array {
+    return query("SELECT id, url, created_at FROM `$table` ORDER BY created_at DESC")
+        ->get_result()
+        ->fetch_all(MYSQLI_ASSOC);
+}
+
 header('Content-Type: application/json');
 
 $table  = DB_PREFIX . 'links';
 $method = $_SERVER['REQUEST_METHOD'];
 
+// --- Ensure table exists ---
+query("CREATE TABLE IF NOT EXISTS `$table` (
+    `id`         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `url`        VARCHAR(2048) NOT NULL,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+)");
+
 // --- GET: return stored links ---
 if ($method === 'GET') {
-    $result = query("SELECT id, url, created_at FROM `$table` ORDER BY created_at DESC")->get_result();
-    echo json_encode($result->fetch_all(MYSQLI_ASSOC));
+    echo json_encode(fetchLinks($table));
     exit;
 }
 
@@ -35,18 +47,15 @@ if ($method === 'POST') {
     $url = json_decode(file_get_contents('php://input'), true)['url'] ?? null;
     if (!$url) { http_response_code(400); die(json_encode(['error' => 'No URL provided'])); }
 
-    // Insert new row
     query("INSERT INTO `$table` (url, created_at) VALUES (?, NOW())", 's', $url);
 
-    // Delete rows beyond the last 5 (oldest first)
     query("DELETE FROM `$table` WHERE id NOT IN (
         SELECT id FROM (
             SELECT id FROM `$table` ORDER BY created_at DESC LIMIT 5
         ) AS keep
     )");
 
-    $result = query("SELECT id, url, created_at FROM `$table` ORDER BY created_at DESC")->get_result();
-    echo json_encode($result->fetch_all(MYSQLI_ASSOC));
+    echo json_encode(fetchLinks($table));
     exit;
 }
 
