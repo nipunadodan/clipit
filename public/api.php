@@ -26,7 +26,7 @@ function fetchLinks(string $table): array {
 
 header('Content-Type: application/json');
 
-$table  = DB_PREFIX . 'links';
+$table  = DB_PREFIX . 'items';
 $method = $_SERVER['REQUEST_METHOD'];
 
 // --- Ensure table exists ---
