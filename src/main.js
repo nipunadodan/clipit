@@ -4,13 +4,41 @@ const saveBtn = document.querySelector('#save-btn');
 const clearBtn = document.querySelector('#clear-btn');
 const entriesList = document.querySelector('#entries');
 
+let isFetching = false;
+
+function setFetching(val) {
+    isFetching = val;
+    updateButtonStates();
+}
+
+async function linkFetch(...args) {
+    setFetching(true);
+    try {
+        return await fetch(...args);
+    } /*catch (e) {
+        return new Response(null, {status: 500});
+    }*/ finally {
+        setFetching(false);
+    }
+}
+
+function updateButtonStates() {
+    const empty = !input.value.trim();
+    saveBtn.disabled = empty || isFetching;
+    clearBtn.disabled = isFetching;
+}
+
 const COPY_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
 const CHECK_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
 const DELETE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`;
-const LINK_ICON  = `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>`;
+const LINK_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>`;
 
 function isUrl(s) {
-    try { return /^https?:\/\//i.test(new URL(s).href); } catch { return false; }
+    try {
+        return /^https?:\/\//i.test(new URL(s).href);
+    } catch {
+        return false;
+    }
 }
 
 function escHtml(s) {
@@ -37,7 +65,7 @@ function render(entries) {
 }
 
 async function loadEntries() {
-    const res = await fetch('api.php');
+    const res = await linkFetch('api.php');
     const entries = res.ok ? await res.json() : [];
     render(entries);
 }
@@ -49,19 +77,23 @@ pasteBtn.addEventListener('click', async () => {
     } catch {
         input.focus();
     }
+    updateButtonStates();
 });
+
+input.addEventListener('input', updateButtonStates);
 
 saveBtn.addEventListener('click', async () => {
     const text = input.value.trim();
     if (!text) return;
 
-    const res = await fetch('api.php', {
+    const res = await linkFetch('api.php', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({url: text}),
     });
     if (res.ok) {
         input.value = '';
+        updateButtonStates();
         const entries = await res.json();
         render(entries);
     }
@@ -92,7 +124,7 @@ entriesList.addEventListener('click', async e => {
     if (deleteBtn) {
         const li = deleteBtn.closest('.entry');
         const id = Number(li.dataset.id);
-        const res = await fetch('api.php', {
+        const res = await linkFetch('api.php', {
             method: 'DELETE',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({id}),
@@ -105,8 +137,9 @@ entriesList.addEventListener('click', async e => {
 });
 
 clearBtn.addEventListener('click', async () => {
-    const res = await fetch('api.php', { method: 'DELETE' });
+    const res = await linkFetch('api.php', {method: 'DELETE'});
     if (res.ok) render([]);
 });
 
 loadEntries();
+updateButtonStates();
