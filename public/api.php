@@ -20,22 +20,35 @@ function query(string $sql, string $types = '', ...$params): mysqli_stmt {
 
 header('Content-Type: application/json');
 
-// --- Logic ---
-$url = json_decode(file_get_contents('php://input'), true)['url'] ?? null;
-if (!$url) { http_response_code(400); die(json_encode(['error' => 'No URL provided'])); }
+$table  = DB_PREFIX . 'links';
+$method = $_SERVER['REQUEST_METHOD'];
 
-$table = DB_PREFIX . 'links';
+// --- GET: return stored links ---
+if ($method === 'GET') {
+    $result = query("SELECT id, url, created_at FROM `$table` ORDER BY created_at DESC")->get_result();
+    echo json_encode($result->fetch_all(MYSQLI_ASSOC));
+    exit;
+}
 
-// Insert new row
-query("INSERT INTO `$table` (url, created_at) VALUES (?, NOW())", 's', $url);
+// --- POST: insert new URL, prune to last 5, return current list ---
+if ($method === 'POST') {
+    $url = json_decode(file_get_contents('php://input'), true)['url'] ?? null;
+    if (!$url) { http_response_code(400); die(json_encode(['error' => 'No URL provided'])); }
 
-// Delete rows beyond the last 5 (oldest first)
-query("DELETE FROM `$table` WHERE id NOT IN (
-    SELECT id FROM (
-        SELECT id FROM `$table` ORDER BY created_at DESC LIMIT 5
-    ) AS keep
-)");
+    // Insert new row
+    query("INSERT INTO `$table` (url, created_at) VALUES (?, NOW())", 's', $url);
 
-// Return current rows
-$result = query("SELECT id, url, created_at FROM `$table` ORDER BY created_at DESC")->get_result();
-echo json_encode($result->fetch_all(MYSQLI_ASSOC));
+    // Delete rows beyond the last 5 (oldest first)
+    query("DELETE FROM `$table` WHERE id NOT IN (
+        SELECT id FROM (
+            SELECT id FROM `$table` ORDER BY created_at DESC LIMIT 5
+        ) AS keep
+    )");
+
+    $result = query("SELECT id, url, created_at FROM `$table` ORDER BY created_at DESC")->get_result();
+    echo json_encode($result->fetch_all(MYSQLI_ASSOC));
+    exit;
+}
+
+http_response_code(405);
+echo json_encode(['error' => 'Method not allowed']);
