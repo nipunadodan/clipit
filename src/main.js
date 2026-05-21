@@ -19,16 +19,16 @@ function render(entries) {
         entriesList.innerHTML = '<li class="empty">No entries yet</li>';
         return;
     }
-    entriesList.innerHTML = entries.map(text => `
+    entriesList.innerHTML = entries.map(entry => `
         <li class="entry">
-            <span class="entry-text">${escHtml(text)}</span>
+            <span class="entry-text">${escHtml(entry.url)}</span>
             <button class="copy-btn" aria-label="Copy">${COPY_ICON}</button>
         </li>
     `).join('');
 }
 
 async function loadEntries() {
-    const res = await fetch('/api/link');
+    const res = await fetch('api.php');
     const entries = res.ok ? await res.json() : [];
     render(entries);
 }
