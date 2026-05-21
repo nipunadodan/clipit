@@ -46,11 +46,10 @@ saveBtn.addEventListener('click', async () => {
     const text = input.value.trim();
     if (!text) return;
 
-    //https://accounts.nipunadodan.com/accounts-api/google/
-    const res = await fetch('/api/link', {
+    const res = await fetch('api.php', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text })
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({url: text}),
     });
     if (res.ok) {
         input.value = '';
