@@ -35,8 +35,7 @@ async function loadEntries() {
 
 pasteBtn.addEventListener('click', async () => {
     try {
-        const text = await navigator.clipboard.readText();
-        input.value = text;
+        input.value = await navigator.clipboard.readText();
         input.focus();
     } catch {
         input.focus();
@@ -46,6 +45,8 @@ pasteBtn.addEventListener('click', async () => {
 saveBtn.addEventListener('click', async () => {
     const text = input.value.trim();
     if (!text) return;
+
+    //https://accounts.nipunadodan.com/accounts-api/google/
     const res = await fetch('/api/link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
