@@ -1,10 +1,17 @@
 const input = document.querySelector('#clip-input');
 const pasteBtn = document.querySelector('#paste-btn');
 const saveBtn = document.querySelector('#save-btn');
+const clearBtn = document.querySelector('#clear-btn');
 const entriesList = document.querySelector('#entries');
 
 const COPY_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
 const CHECK_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+const DELETE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`;
+const LINK_ICON  = `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>`;
+
+function isUrl(s) {
+    try { return /^https?:\/\//i.test(new URL(s).href); } catch { return false; }
+}
 
 function escHtml(s) {
     return s
@@ -20,9 +27,11 @@ function render(entries) {
         return;
     }
     entriesList.innerHTML = entries.map(entry => `
-        <li class="entry">
+        <li class="entry" data-id="${entry.id}">
             <span class="entry-text">${escHtml(entry.url)}</span>
+            ${isUrl(entry.url) ? `<a class="link-btn" href="${escHtml(entry.url)}" target="_blank" rel="noopener noreferrer" aria-label="Open link">${LINK_ICON}</a>` : ''}
             <button class="copy-btn" aria-label="Copy">${COPY_ICON}</button>
+            <button class="delete-btn" aria-label="Delete">${DELETE_ICON}</button>
         </li>
     `).join('');
 }
@@ -63,20 +72,41 @@ input.addEventListener('keydown', e => {
 });
 
 entriesList.addEventListener('click', async e => {
-    const btn = e.target.closest('.copy-btn');
-    if (!btn) return;
-    const text = btn.closest('.entry').querySelector('.entry-text').textContent;
-    try {
-        await navigator.clipboard.writeText(text);
-        btn.innerHTML = CHECK_ICON;
-        btn.classList.add('copied');
-        setTimeout(() => {
-            btn.innerHTML = COPY_ICON;
-            btn.classList.remove('copied');
-        }, 1500);
-    } catch {
-        // clipboard write failed silently
+    const copyBtn = e.target.closest('.copy-btn');
+    if (copyBtn) {
+        const text = copyBtn.closest('.entry').querySelector('.entry-text').textContent;
+        try {
+            await navigator.clipboard.writeText(text);
+            copyBtn.innerHTML = CHECK_ICON;
+            copyBtn.classList.add('copied');
+            setTimeout(() => {
+                copyBtn.innerHTML = COPY_ICON;
+                copyBtn.classList.remove('copied');
+            }, 1500);
+        } catch {
+            // clipboard write failed silently
+        }
     }
+
+    const deleteBtn = e.target.closest('.delete-btn');
+    if (deleteBtn) {
+        const li = deleteBtn.closest('.entry');
+        const id = Number(li.dataset.id);
+        const res = await fetch('api.php', {
+            method: 'DELETE',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({id}),
+        });
+        if (res.ok) {
+            const entries = await res.json();
+            render(entries);
+        }
+    }
+});
+
+clearBtn.addEventListener('click', async () => {
+    const res = await fetch('api.php', { method: 'DELETE' });
+    if (res.ok) render([]);
 });
 
 loadEntries();

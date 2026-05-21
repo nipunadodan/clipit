@@ -24,10 +24,73 @@ function fetchLinks(string $table): array {
         ->fetch_all(MYSQLI_ASSOC);
 }
 
+// --- Rate Limiting (file-based, no DB) ---
+define('RATE_LIMITS', [
+    'GET'  => ['limit' => 60, 'window' => 60],   // 60 requests per 60 seconds
+    'POST' => ['limit' => 10, 'window' => 60],   // 10 requests per 60 seconds
+]);
+
+function enforceRateLimit(string $method): void {
+    $ip  = preg_replace('/[^a-fA-F0-9:\.\-]/', '_', $_SERVER['REMOTE_ADDR'] ?? 'unknown');
+    $cfg = RATE_LIMITS[$method] ?? ['limit' => 30, 'window' => 60];
+
+    $tmpDir   = sys_get_temp_dir();
+    $maxFiles = 5;
+
+    // Collect all rate-limit files sorted by last-modified time (oldest first)
+    $allFiles = glob($tmpDir . DIRECTORY_SEPARATOR . 'rl_*.json') ?: [];
+    usort($allFiles, fn($a, $b) => filemtime($a) - filemtime($b));
+
+    // Delete oldest files until we are under the cap (leave room for this IP's file)
+    $currentFile = $tmpDir . DIRECTORY_SEPARATOR . 'rl_' . md5($ip) . '.json';
+    $isNew       = !file_exists($currentFile);
+    $existing    = array_filter($allFiles, fn($f) => $f !== $currentFile);
+
+    if ($isNew && count($existing) >= $maxFiles) {
+        $toDelete = array_slice(array_values($existing), 0, count($existing) - $maxFiles + 1);
+        foreach ($toDelete as $old) @unlink($old);
+    }
+
+    $file = $currentFile;
+    $fh   = fopen($file, 'c+');
+    if (!$fh) return; // fail open — don't block if filesystem is unavailable
+
+    flock($fh, LOCK_EX);
+
+    $data = json_decode(fread($fh, 65536), true) ?? [];
+    $now  = time();
+
+    // Keep only timestamps within the current window
+    $data[$method] = array_values(array_filter(
+        $data[$method] ?? [],
+        fn(int $t) => ($now - $t) < $cfg['window']
+    ));
+
+    if (count($data[$method]) >= $cfg['limit']) {
+        flock($fh, LOCK_UN);
+        fclose($fh);
+        http_response_code(429);
+        header('Retry-After: ' . $cfg['window']);
+        die(json_encode(['error' => 'Too many requests. Please slow down.']));
+    }
+
+    // Record this hit and persist
+    $data[$method][] = $now;
+    ftruncate($fh, 0);
+    rewind($fh);
+    fwrite($fh, json_encode($data));
+
+    flock($fh, LOCK_UN);
+    fclose($fh);
+}
+
 header('Content-Type: application/json');
 
 $table  = DB_PREFIX . 'items';
 $method = $_SERVER['REQUEST_METHOD'];
+
+// Apply rate limiting before any SQL read/write
+enforceRateLimit($method);
 
 // --- Ensure table exists ---
 query("CREATE TABLE IF NOT EXISTS `$table` (
@@ -56,6 +119,21 @@ if ($method === 'POST') {
     )");
 
     echo json_encode(fetchLinks($table));
+    exit;
+}
+
+// --- DELETE: delete single item by id, or truncate all ---
+if ($method === 'DELETE') {
+    $body = json_decode(file_get_contents('php://input'), true);
+    $id   = isset($body['id']) ? (int)$body['id'] : null;
+
+    if ($id) {
+        query("DELETE FROM `$table` WHERE id = ?", 'i', $id);
+        echo json_encode(fetchLinks($table));
+    } else {
+        query("TRUNCATE TABLE `$table`");
+        echo json_encode([]);
+    }
     exit;
 }
 
