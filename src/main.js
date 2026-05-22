@@ -89,10 +89,10 @@ function render(entries) {
     }
     entriesList.innerHTML = entries.map(entry => `
         <li class="entry" data-id="${entry.id}">
-            <span class="entry-text">${escHtml(entry.url)}</span>
-            ${isUrl(entry.url) ? `<a class="link-btn" href="${escHtml(entry.url)}" target="_blank" rel="noopener noreferrer" aria-label="Open link">${LINK_ICON}</a>` : ''}
-            <button class="copy-btn" aria-label="Copy">${COPY_ICON}</button>
-            <button class="delete-btn" aria-label="Delete">${DELETE_ICON}</button>
+            <span class="entry-text">${escHtml(entry.text)}</span>
+            ${isUrl(entry.text) ? `<a class="link-btn icon-btn sm" href="${escHtml(entry.text)}" target="_blank" rel="noopener noreferrer" aria-label="Open link">${LINK_ICON}</a>` : ''}
+            <button class="copy-btn icon-btn sm" aria-label="Copy">${COPY_ICON}</button>
+            <button class="delete-btn icon-btn sm" aria-label="Delete">${DELETE_ICON}</button>
         </li>
     `).join('');
 }
@@ -153,7 +153,7 @@ saveBtn.addEventListener('click', async () => {
     const res = await linkFetch('api.php', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({url: text}),
+        body: JSON.stringify({text}),
     });
     if (res.ok) {
         input.value = '';
