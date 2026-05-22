@@ -1,0 +1,65 @@
+name: Clipboard Pipeline
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment: prod
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Set Git user
+        run: |
+          git config --global user.email "action@github.com"
+          git config --global user.name "GitHub Action"
+
+      - name: Bump version
+        id: version
+        run: |
+          NEW_VERSION=$(npm version patch --no-git-tag-version | sed 's/v//')
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "New version: $NEW_VERSION"
+
+      - name: Commit version bump
+        run: |
+          git add package.json
+          git commit -m "chore: bump version to ${{ steps.version.outputs.version }} [skip ci]"
+          git tag "v${{ steps.version.outputs.version }}"
+
+      - name: Commit and push version bump
+        if: github.ref == 'refs/heads/main'
+        continue-on-error: true
+        run: |
+          git push origin main --tags
+
+      - name: Build application
+        run: npx vite build
+
+      - name: Deploy to server via FTP
+        if: github.ref == 'refs/heads/main'
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: ./dist/
+          server-dir: /projects/links/
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/node_modules/**
+            **/docs/**
+          dangerous-clean-slate: false
