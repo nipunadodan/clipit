@@ -2,6 +2,7 @@ const input = document.querySelector('#clip-input');
 const pasteBtn = document.querySelector('#paste-btn');
 const saveBtn = document.querySelector('#save-btn');
 const clearBtn = document.querySelector('#clear-btn');
+const refreshBtn = document.querySelector('#refresh-btn');
 const entriesList = document.querySelector('#entries');
 
 let isFetching = false;
@@ -140,6 +141,12 @@ clearBtn.addEventListener('click', async () => {
 });
 
 loadEntries();
+
+refreshBtn.addEventListener('click', async () => {
+    refreshBtn.classList.add('spinning');
+    await loadEntries();
+    refreshBtn.classList.remove('spinning');
+});
 
 const offlineNotice = document.querySelector('#offline-notice');
 function updateOnlineStatus() {
