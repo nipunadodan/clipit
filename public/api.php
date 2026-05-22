@@ -19,7 +19,7 @@ function query(string $sql, string $types = '', ...$params): mysqli_stmt {
 }
 
 function fetchLinks(string $table): array {
-    return query("SELECT id, url, created_at FROM `$table` ORDER BY created_at DESC")
+    return query("SELECT id, text, created_at FROM `$table` ORDER BY created_at DESC")
         ->get_result()
         ->fetch_all(MYSQLI_ASSOC);
 }
@@ -95,7 +95,7 @@ enforceRateLimit($method);
 // --- Ensure table exists ---
 query("CREATE TABLE IF NOT EXISTS `$table` (
     `id`         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    `url`        VARCHAR(2048) NOT NULL,
+    `text`       VARCHAR(2048) NOT NULL,
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 )");
 
@@ -125,10 +125,10 @@ if ($method === 'POST') {
         exit;
     }
 
-    $url = $body['url'] ?? null;
-    if (!$url) { http_response_code(400); die(json_encode(['error' => 'No URL provided'])); }
+    $text = $body['text'] ?? null;
+    if (!$text) { http_response_code(400); die(json_encode(['error' => 'No text provided'])); }
 
-    query("INSERT INTO `$table` (url, created_at) VALUES (?, NOW())", 's', $url);
+    query("INSERT INTO `$table` (text, created_at) VALUES (?, NOW())", 's', $text);
 
     query("DELETE FROM `$table` WHERE id NOT IN (
         SELECT id FROM (

@@ -1,0 +1,25 @@
+name: Clipboard Local Deploy
+
+on:
+  push:
+    branches: [ dev ]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build-and-deploy:
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Build application
+        run: npx vite build
+
+      - name: Deploy to local directory
+        run: |
+          mkdir -p ~/html/nsd/clipit
+          cp -r ./dist/. ~/html/nsd/clipit/
+
