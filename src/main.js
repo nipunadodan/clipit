@@ -4,9 +4,39 @@ const saveBtn = document.querySelector('#save-btn');
 const clearBtn = document.querySelector('#clear-btn');
 const refreshBtn = document.querySelector('#refresh-btn');
 const entriesList = document.querySelector('#entries');
+const loginShell = document.querySelector('#login-shell');
+const appShell = document.querySelector('#app-shell');
+const passkeyInput = document.querySelector('#passkey-input');
+const loginBtn = document.querySelector('#login-btn');
+const loginError = document.querySelector('#login-error');
 
 document.querySelector('#app-version').textContent = `v${__APP_VERSION__}`;
 let isFetching = false;
+const AUTH_STORAGE_KEY = 'clipit.authenticated';
+
+function isAuthenticated() {
+    return sessionStorage.getItem(AUTH_STORAGE_KEY) === '1';
+}
+
+function setAuthenticated(value) {
+    if (value) {
+        sessionStorage.setItem(AUTH_STORAGE_KEY, '1');
+    } else {
+        sessionStorage.removeItem(AUTH_STORAGE_KEY);
+    }
+}
+
+function toggleShells(authenticated) {
+    loginShell.classList.toggle('hidden', authenticated);
+    loginShell.setAttribute('aria-hidden', authenticated ? 'true' : 'false');
+    appShell.classList.toggle('hidden', !authenticated);
+    appShell.setAttribute('aria-hidden', authenticated ? 'false' : 'true');
+}
+
+function updateLoginState() {
+    const empty = !passkeyInput.value.trim();
+    loginBtn.disabled = empty || isFetching;
+}
 
 function setFetching(val) {
     isFetching = val;
@@ -28,6 +58,7 @@ function updateButtonStates() {
     const empty = !input.value.trim();
     saveBtn.disabled = empty || isFetching;
     clearBtn.disabled = isFetching;
+    updateLoginState();
 }
 
 const COPY_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
@@ -72,6 +103,32 @@ async function loadEntries() {
     render(entries);
 }
 
+async function login() {
+    const passkey = passkeyInput.value.trim();
+    if (!passkey) return;
+
+    loginError.textContent = '';
+    const res = await linkFetch('api.php', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({passkey}),
+    });
+
+    const data = res.ok ? await res.json().catch(() => ({})) : {};
+
+    if (!res.ok || data.authenticated !== true) {
+        loginError.textContent = data.error || 'Invalid passkey';
+        passkeyInput.select();
+        return;
+    }
+
+    setAuthenticated(true);
+    passkeyInput.value = '';
+    toggleShells(true);
+    await loadEntries();
+    input.focus();
+}
+
 pasteBtn.addEventListener('click', async () => {
     try {
         input.value = await navigator.clipboard.readText();
@@ -81,6 +138,13 @@ pasteBtn.addEventListener('click', async () => {
 });
 
 input.addEventListener('input', updateButtonStates);
+passkeyInput.addEventListener('input', updateLoginState);
+
+loginBtn.addEventListener('click', login);
+
+passkeyInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') loginBtn.click();
+});
 
 saveBtn.addEventListener('click', async () => {
     const text = input.value.trim();
@@ -147,7 +211,13 @@ clearBtn.addEventListener('click', async () => {
     if (res.ok) render([]);
 });
 
-loadEntries();
+if (isAuthenticated()) {
+    toggleShells(true);
+    loadEntries();
+} else {
+    toggleShells(false);
+    passkeyInput.focus();
+}
 
 refreshBtn.addEventListener('click', async () => {
     refreshBtn.classList.add('spinning');
@@ -196,6 +266,7 @@ function updateOnlineStatus() {
 window.addEventListener('online', updateOnlineStatus);
 window.addEventListener('offline', updateOnlineStatus);
 updateOnlineStatus();
+updateButtonStates();
 
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});

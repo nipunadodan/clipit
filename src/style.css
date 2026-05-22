@@ -10,6 +10,7 @@
     --border: #e3e3e3;
     --text: #111;
     --muted: #aaa;
+    --text-muted: #888;
     --radius: 10px;
     --font: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
@@ -32,6 +33,70 @@ main {
     flex-direction: column;
     gap: 10px;
     flex: 1;
+}
+
+.hidden {
+    display: none !important;
+}
+
+#login-shell {
+    width: 100%;
+    max-width: 380px;
+    margin: 56px auto 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.login-subtitle {
+    color: var(--muted);
+    font-size: 0.9rem;
+    margin-bottom: 6px;
+}
+
+.login-wrap {
+    display: flex;
+    gap: 8px;
+}
+
+#passkey-input {
+    flex: 1;
+    min-width: 0;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius);
+    outline: none;
+    padding: 13px 14px;
+    font-size: 0.95rem;
+    color: var(--text);
+    background: var(--bg);
+    font-family: var(--font);
+}
+
+#passkey-input:focus {
+    border-color: var(--text);
+}
+
+#login-btn {
+    padding: 0 16px;
+    border: none;
+    border-radius: var(--radius);
+    background: var(--text);
+    color: #fff;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: var(--font);
+}
+
+#login-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+#login-error {
+    min-height: 1.2rem;
+    color: #dc2626;
+    font-size: 0.82rem;
 }
 
 footer {

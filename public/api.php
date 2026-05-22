@@ -107,7 +107,25 @@ if ($method === 'GET') {
 
 // --- POST: insert new URL, prune to last 5, return current list ---
 if ($method === 'POST') {
-    $url = json_decode(file_get_contents('php://input'), true)['url'] ?? null;
+    $body = json_decode(file_get_contents('php://input'), true) ?? [];
+
+    // Login: verify submitted passkey hash from env.php
+    if (array_key_exists('passkey', $body)) {
+        $passkey = trim((string)$body['passkey']);
+        if (!defined('PASSKEY') || PASSKEY === '') {
+            http_response_code(500);
+            die(json_encode(['error' => 'Passkey is not configured']));
+        }
+        if (!password_verify($passkey, PASSKEY)) {
+            http_response_code(401);
+            die(json_encode(['error' => 'Invalid passkey']));
+        }
+
+        echo json_encode(['authenticated' => true]);
+        exit;
+    }
+
+    $url = $body['url'] ?? null;
     if (!$url) { http_response_code(400); die(json_encode(['error' => 'No URL provided'])); }
 
     query("INSERT INTO `$table` (url, created_at) VALUES (?, NOW())", 's', $url);
