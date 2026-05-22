@@ -1,6 +1,6 @@
 {
-  "name": "Clipboard",
-  "short_name": "Clipboard",
+  "name": "Clipit",
+  "short_name": "Clipit",
   "description": "A simple link/clipboard sharing app",
   "start_url": "./",
   "display": "standalone",

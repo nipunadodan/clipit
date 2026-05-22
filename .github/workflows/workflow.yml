@@ -1,4 +1,4 @@
-name: Clipboard Pipeline
+name: Clipit Pipeline
 
 on:
   push:

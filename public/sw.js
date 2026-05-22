@@ -1,4 +1,4 @@
-const CACHE = 'clipboard-v2';
+const CACHE = 'Clipit-v2';
 
 self.addEventListener('install', e => {
     e.waitUntil(
