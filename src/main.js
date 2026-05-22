@@ -5,6 +5,7 @@ const clearBtn = document.querySelector('#clear-btn');
 const refreshBtn = document.querySelector('#refresh-btn');
 const entriesList = document.querySelector('#entries');
 
+document.querySelector('#app-version').textContent = `v${__APP_VERSION__}`;
 let isFetching = false;
 
 function setFetching(val) {
@@ -123,6 +124,10 @@ entriesList.addEventListener('click', async e => {
     if (deleteBtn) {
         const li = deleteBtn.closest('.entry');
         const id = Number(li.dataset.id);
+        const text = li.querySelector('.entry-text').textContent;
+        const short = text.length > 48 ? text.slice(0, 48) + '…' : text;
+        const ok = await confirm(`Delete "${short}"?`);
+        if (!ok) return;
         const res = await linkFetch('api.php', {
             method: 'DELETE',
             headers: {'Content-Type': 'application/json'},
@@ -136,6 +141,8 @@ entriesList.addEventListener('click', async e => {
 });
 
 clearBtn.addEventListener('click', async () => {
+    const ok = await confirm('Clear all entries?');
+    if (!ok) return;
     const res = await linkFetch('api.php', {method: 'DELETE'});
     if (res.ok) render([]);
 });
@@ -147,6 +154,40 @@ refreshBtn.addEventListener('click', async () => {
     await loadEntries();
     refreshBtn.classList.remove('spinning');
 });
+
+// ── Confirm modal ──────────────────────────────────────────
+const confirmModal   = document.querySelector('#confirm-modal');
+const confirmTitle   = document.querySelector('#confirm-title');
+const confirmOkBtn   = document.querySelector('#confirm-ok');
+const confirmCancelBtn = document.querySelector('#confirm-cancel');
+
+function confirm(message) {
+    return new Promise(resolve => {
+        confirmTitle.textContent = message;
+        confirmModal.classList.add('visible');
+        confirmOkBtn.focus();
+
+        function cleanup(result) {
+            confirmModal.classList.remove('visible');
+            confirmOkBtn.removeEventListener('click', onOk);
+            confirmCancelBtn.removeEventListener('click', onCancel);
+            confirmModal.removeEventListener('click', onBackdrop);
+            document.removeEventListener('keydown', onKey);
+            resolve(result);
+        }
+
+        const onOk      = () => cleanup(true);
+        const onCancel  = () => cleanup(false);
+        const onBackdrop = e => { if (e.target === confirmModal) cleanup(false); };
+        const onKey     = e => { if (e.key === 'Escape') cleanup(false); };
+
+        confirmOkBtn.addEventListener('click', onOk);
+        confirmCancelBtn.addEventListener('click', onCancel);
+        confirmModal.addEventListener('click', onBackdrop);
+        document.addEventListener('keydown', onKey);
+    });
+}
+// ───────────────────────────────────────────────────────────
 
 const offlineNotice = document.querySelector('#offline-notice');
 function updateOnlineStatus() {
