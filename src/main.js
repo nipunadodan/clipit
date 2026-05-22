@@ -140,3 +140,16 @@ clearBtn.addEventListener('click', async () => {
 });
 
 loadEntries();
+
+const offlineNotice = document.querySelector('#offline-notice');
+function updateOnlineStatus() {
+    offlineNotice.classList.toggle('visible', !navigator.onLine);
+}
+window.addEventListener('online', updateOnlineStatus);
+window.addEventListener('offline', updateOnlineStatus);
+updateOnlineStatus();
+
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+}
+
