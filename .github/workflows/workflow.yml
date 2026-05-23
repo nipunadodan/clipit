@@ -52,6 +52,13 @@ jobs:
       - name: Build application
         run: npx vite build
 
+      - name: Remove old assets folder via FTP
+        if: github.ref == 'refs/heads/main'
+        run: |
+          sudo apt-get install -y lftp
+          lftp -u "${{ secrets.FTP_USERNAME }},${{ secrets.FTP_PASSWORD }}" "ftp://${{ secrets.FTP_SERVER }}" \
+            -e "set ssl:verify-certificate no; set ftp:passive-mode yes; rm -rf /projects/clipit/assets; bye"
+
       - name: Deploy to server via FTP
         if: github.ref == 'refs/heads/main'
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
@@ -60,7 +67,7 @@ jobs:
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: ./dist/
-          server-dir: /projects/links/
+          server-dir: /projects/clipit/
           exclude: |
             **/.git*
             **/.git*/**
