@@ -58,11 +58,19 @@ function setFetching(val) {
     updateButtonStates();
 }
 
-async function linkFetch(...args) {
+async function clipitFetch(url, method = 'GET', data = null, options = {}) {
     setFetching(true);
-    return await fetch(...args)
+    const isGet = method === 'GET';
+    return await fetch(url, {
+        method,
+        ...(!isGet && {
+            headers: {'Content-Type': 'application/json'},
+            ...(data != null && {body: JSON.stringify(data)}),
+        }),
+        ...options,
+    })
         .catch(e => {
-                console.error('Fetch error:', e);
+            console.error('Fetch error:', e);
         })
         .finally(() => setFetching(false));
 }
@@ -78,6 +86,7 @@ const COPY_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15
 const CHECK_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
 const DELETE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>`;
 const LINK_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>`;
+const PIN_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></svg>`;
 
 function isUrl(s) {
     try {
@@ -101,9 +110,10 @@ function render(entries) {
         return;
     }
     entriesList.innerHTML = entries.map(entry => `
-        <li class="entry flex items-center rounded" data-id="${entry.id}">
+        <li class="entry flex items-center rounded${entry.pinned ? ' pinned' : ''}" data-id="${entry.id}" data-pinned="${entry.pinned}">
             <span class="entry-text flex-1 min-w-0">${escHtml(entry.text)}</span>
             ${isUrl(entry.text) ? `<a class="link-btn icon-btn sm" href="${escHtml(entry.text)}" target="_blank" rel="noopener noreferrer" aria-label="Open link">${LINK_ICON}</a>` : ''}
+            <button class="pin-btn icon-btn sm${entry.pinned ? ' active' : ''}" aria-label="${entry.pinned ? 'Unpin' : 'Pin'}">${PIN_ICON}</button>
             <button class="copy-btn icon-btn sm" aria-label="Copy">${COPY_ICON}</button>
             <button class="delete-btn icon-btn sm" aria-label="Delete">${DELETE_ICON}</button>
         </li>
@@ -111,7 +121,7 @@ function render(entries) {
 }
 
 async function loadEntries() {
-    const res = await linkFetch('api.php');
+    const res = await clipitFetch('api.php');
     const entries = res && res.ok ? await res.json() : [];
     render(entries);
 }
@@ -121,11 +131,7 @@ async function login() {
     if (!passkey) return;
 
     loginError.textContent = '';
-    const res = await linkFetch('api.php', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({passkey}),
-    });
+    const res = await clipitFetch('api.php', 'POST', {passkey});
 
     const data = res.ok ? await res.json().catch(() => ({})) : {};
 
@@ -171,11 +177,7 @@ saveBtn.addEventListener('click', async () => {
     const text = input.value.trim();
     if (!text) return;
 
-    const res = await linkFetch('api.php', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({text}),
-    });
+    const res = await clipitFetch('api.php', 'POST', {text});
     if (res.ok) {
         input.value = '';
         input.dispatchEvent(new Event('input'));
@@ -189,6 +191,15 @@ input.addEventListener('keydown', e => {
 });
 
 entriesList.addEventListener('click', async e => {
+    const pinBtn = e.target.closest('.pin-btn');
+    if (pinBtn) {
+        const li = pinBtn.closest('.entry');
+        const id = Number(li.dataset.id);
+        const currentlyPinned = li.dataset.pinned === '1';
+        await togglePin(id, !currentlyPinned);
+        return;
+    }
+
     const copyBtn = e.target.closest('.copy-btn');
     if (copyBtn) {
         const text = copyBtn.closest('.entry').querySelector('.entry-text').textContent;
@@ -213,11 +224,7 @@ entriesList.addEventListener('click', async e => {
         const short = text.length > 48 ? text.slice(0, 48) + '…' : text;
         const ok = await confirm(`Delete "${short}"?`);
         if (!ok) return;
-        const res = await linkFetch('api.php', {
-            method: 'DELETE',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({id}),
-        });
+        const res = await clipitFetch('api.php', 'DELETE', {id});
         if (res.ok) {
             const entries = await res.json();
             render(entries);
@@ -228,17 +235,21 @@ entriesList.addEventListener('click', async e => {
 clearBtn.addEventListener('click', async () => {
     const ok = await confirm('Clear all entries?');
     if (!ok) return;
-    const res = await linkFetch('api.php', {method: 'DELETE'});
+    const res = await clipitFetch('api.php', 'DELETE');
     if (res.ok) render([]);
 });
 
+async function togglePin(id, pinned) {
+    const res = await clipitFetch('api.php', 'PATCH', {id, pinned});
+    if (res && res.ok) {
+        const entries = await res.json();
+        render(entries);
+    }
+}
+
 // ── Web Share Target ────────────────────────────────────────
 async function saveSharedText(text) {
-    const res = await linkFetch('api.php', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({text}),
-    });
+    const res = await clipitFetch('api.php', 'POST', {text});
     if (res.ok) {
         const entries = await res.json();
         render(entries);

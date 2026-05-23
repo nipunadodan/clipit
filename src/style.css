@@ -185,6 +185,15 @@ h1 { font-size: 1.6rem; font-weight: 700; letter-spacing: -0.01em; }
 }
 
 .delete-btn:hover { color: #e55; }
+.pin-btn.active { color: #a78bfa; }
+.pin-btn.active:hover { color: #a78bfa; background: color-mix(in srgb, #a78bfa 12%, transparent); }
+
+.entry.pinned {
+    border-color: color-mix(in srgb, #a78bfa 35%, transparent);
+    background: color-mix(in srgb, #a78bfa 6%, var(--surface));
+}
+.entry.pinned:hover { border-color: color-mix(in srgb, #a78bfa 60%, transparent); }
+
 .empty { font-size: 0.85rem; padding: 28px 0; }
 
 /* ── Overlays ── */
