@@ -324,11 +324,21 @@ function confirm(message) {
 // ───────────────────────────────────────────────────────────
 
 const offlineNotice = document.querySelector('#offline-notice');
+const useOfflineBtn = document.querySelector('#use-offline-btn');
+let offlineDismissed = false;
+
 function updateOnlineStatus() {
-    offlineNotice.classList.toggle('visible', !navigator.onLine);
+    if (navigator.onLine) {
+        offlineDismissed = false;
+    }
+    offlineNotice.classList.toggle('visible', !navigator.onLine && !offlineDismissed);
 }
 window.addEventListener('online', updateOnlineStatus);
 window.addEventListener('offline', updateOnlineStatus);
+useOfflineBtn.addEventListener('click', () => {
+    offlineDismissed = true;
+    offlineNotice.classList.remove('visible');
+});
 updateOnlineStatus();
 updateButtonStates();
 
