@@ -1,6 +1,6 @@
 import { put, list } from '@vercel/blob';
 
-const FILENAME = 'clipboard.json';
+const FILENAME = 'clipit.json';
 const MAX_ENTRIES = 5;
 
 export default async function handler(req, res) {

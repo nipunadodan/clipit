@@ -1,4 +1,4 @@
-name: Clipboard Local Deploy
+name: Clipit Local Deploy
 
 on:
   push:

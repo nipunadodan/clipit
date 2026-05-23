@@ -1,4 +1,4 @@
-name: Clipboard Pipeline
+name: Clipit Pipeline
 
 on:
   push:
@@ -42,13 +42,12 @@ jobs:
         run: |
           git add package.json
           git commit -m "CHORE | bump version to ${{ steps.version.outputs.version }}"
-          git tag "v${{ steps.version.outputs.version }}"
 
-      - name: Commit and push version bump
+      - name: Push version bump
         if: github.ref == 'refs/heads/main'
         continue-on-error: true
         run: |
-          git push origin main --tags
+          git push origin main
 
       - name: Build application
         run: npx vite build

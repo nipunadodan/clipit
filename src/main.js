@@ -3,6 +3,7 @@ const pasteBtn = document.querySelector('#paste-btn');
 const saveBtn = document.querySelector('#save-btn');
 const clearBtn = document.querySelector('#clear-btn');
 const refreshBtn = document.querySelector('#refresh-btn');
+const themeBtn = document.querySelector('#theme-btn');
 const entriesList = document.querySelector('#entries');
 const loginShell = document.querySelector('#login-shell');
 const appShell = document.querySelector('#app-shell');
@@ -14,15 +15,29 @@ document.querySelector('#app-version').textContent = `v${__APP_VERSION__}`;
 let isFetching = false;
 const AUTH_STORAGE_KEY = 'clipit.authenticated';
 
+const AUTH_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 1 week
+
 function isAuthenticated() {
-    return sessionStorage.getItem(AUTH_STORAGE_KEY) === '1';
+    const raw = localStorage.getItem(AUTH_STORAGE_KEY);
+    if (!raw) return false;
+    try {
+        const { expiry } = JSON.parse(raw);
+        if (Date.now() > expiry) {
+            localStorage.removeItem(AUTH_STORAGE_KEY);
+            return false;
+        }
+        return true;
+    } catch {
+        localStorage.removeItem(AUTH_STORAGE_KEY);
+        return false;
+    }
 }
 
 function setAuthenticated(value) {
     if (value) {
-        sessionStorage.setItem(AUTH_STORAGE_KEY, '1');
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ expiry: Date.now() + AUTH_EXPIRY_MS }));
     } else {
-        sessionStorage.removeItem(AUTH_STORAGE_KEY);
+        localStorage.removeItem(AUTH_STORAGE_KEY);
     }
 }
 
@@ -84,12 +99,12 @@ function escHtml(s) {
 
 function render(entries) {
     if (!entries.length) {
-        entriesList.innerHTML = '<li class="empty">No entries yet</li>';
+        entriesList.innerHTML = '<li class="empty muted text-center">No entries yet</li>';
         return;
     }
     entriesList.innerHTML = entries.map(entry => `
-        <li class="entry" data-id="${entry.id}">
-            <span class="entry-text">${escHtml(entry.text)}</span>
+        <li class="entry flex items-center rounded" data-id="${entry.id}">
+            <span class="entry-text flex-1 min-w-0">${escHtml(entry.text)}</span>
             ${isUrl(entry.text) ? `<a class="link-btn icon-btn sm" href="${escHtml(entry.text)}" target="_blank" rel="noopener noreferrer" aria-label="Open link">${LINK_ICON}</a>` : ''}
             <button class="copy-btn icon-btn sm" aria-label="Copy">${COPY_ICON}</button>
             <button class="delete-btn icon-btn sm" aria-label="Delete">${DELETE_ICON}</button>
@@ -126,6 +141,13 @@ async function login() {
     passkeyInput.value = '';
     toggleShells(true);
     await loadEntries();
+
+    const pendingShare = sessionStorage.getItem('clipit.pendingShare');
+    if (pendingShare) {
+        sessionStorage.removeItem('clipit.pendingShare');
+        await saveSharedText(pendingShare);
+    }
+
     input.focus();
 }
 
@@ -211,10 +233,52 @@ clearBtn.addEventListener('click', async () => {
     if (res.ok) render([]);
 });
 
+// ── Web Share Target ────────────────────────────────────────
+async function saveSharedText(text) {
+    const res = await linkFetch('api.php', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({text}),
+    });
+    if (res.ok) {
+        const entries = await res.json();
+        render(entries);
+    }
+}
+
+function getSharedText() {
+    const params = new URLSearchParams(window.location.search);
+    const parts = [params.get('title'), params.get('text'), params.get('url')]
+        .map(s => s?.trim())
+        .filter(Boolean);
+    return parts.join(' ');
+}
+
+function clearShareParams() {
+    const url = new URL(window.location);
+    url.searchParams.delete('title');
+    url.searchParams.delete('text');
+    url.searchParams.delete('url');
+    history.replaceState(null, '', url.pathname + (url.search !== '?' ? url.search : ''));
+}
+// ────────────────────────────────────────────────────────────
+
 if (isAuthenticated()) {
     toggleShells(true);
-    loadEntries();
+    const sharedText = getSharedText();
+    if (sharedText) {
+        clearShareParams();
+        loadEntries().then(() => saveSharedText(sharedText));
+    } else {
+        loadEntries();
+    }
 } else {
+    const sharedText = getSharedText();
+    if (sharedText) {
+        clearShareParams();
+        // Store temporarily so we can pre-fill after login
+        sessionStorage.setItem('clipit.pendingShare', sharedText);
+    }
     toggleShells(false);
     passkeyInput.focus();
 }
@@ -271,4 +335,30 @@ updateButtonStates();
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
 }
+
+// ── Theme toggle ────────────────────────────────────────────
+const THEME_KEY = 'clipit.theme';
+
+function applyTheme(theme) {
+    if (theme) {
+        document.documentElement.setAttribute('data-theme', theme);
+    } else {
+        document.documentElement.removeAttribute('data-theme');
+    }
+}
+
+// Restore saved theme on load (initial state already handled by inline script in <head>)
+const _savedTheme = localStorage.getItem(THEME_KEY);
+if (_savedTheme) applyTheme(_savedTheme);
+
+themeBtn.addEventListener('click', () => {
+    const current = document.documentElement.getAttribute('data-theme');
+    const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    // Determine effective current mode
+    const isDark = current === 'dark' || (!current && systemDark);
+    const next = isDark ? 'light' : 'dark';
+    applyTheme(next);
+    localStorage.setItem(THEME_KEY, next);
+});
+// ────────────────────────────────────────────────────────────
 

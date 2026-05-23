@@ -12,36 +12,53 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="src/style.css">
+    <script>
+        (function() {
+            var t = localStorage.getItem('clipit.theme');
+            if (!t && window.matchMedia('(prefers-color-scheme: dark)').matches) t = 'dark';
+            if (t) document.documentElement.setAttribute('data-theme', t);
+        })();
+    </script>
 </head>
-<body>
-    <main>
-        <section id="login-shell" aria-labelledby="login-title">
+<body class="flex flex-col items-center">
+    <main class="flex flex-col w-full">
+        <section id="login-shell" class="flex flex-col w-full" aria-labelledby="login-title">
             <h1 id="login-title">Clipit&deg;</h1>
-            <p class="login-subtitle">Enter your passkey to continue</p>
-            <div class="login-wrap">
+            <p class="login-subtitle muted">Enter your passkey to continue</p>
+            <div class="login-wrap flex gap-2">
                 <input
                     type="password"
                     id="passkey-input"
+                    class="rounded flex-1 min-w-0"
                     placeholder="Passkey"
                     autocomplete="current-password"
                     spellcheck="false"
                 />
-                <button id="login-btn">Login</button>
+                <button id="login-btn" class="rounded">Login</button>
             </div>
             <p id="login-error" role="alert" aria-live="polite"></p>
         </section>
 
-        <section id="app-shell" class="hidden" aria-hidden="true">
-            <div class="title-row">
+        <section id="app-shell" class="hidden flex flex-col" aria-hidden="true">
+            <div class="flex items-center justify-between">
                 <h1>Clipit&deg;</h1>
-                <button id="refresh-btn" class="icon-btn" aria-label="Refresh">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-                </button>
+                <div class="flex gap-3">
+                    <button id="theme-btn" class="icon-btn rounded-full" aria-label="Toggle theme">
+                        <!-- sun -->
+                        <svg class="theme-icon sun" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                        <!-- moon -->
+                        <svg class="theme-icon moon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                    </button>
+                    <button id="refresh-btn" class="icon-btn" aria-label="Refresh">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                    </button>
+                </div>
             </div>
-            <div class="input-wrap">
+            <div class="input-wrap flex items-center">
                 <input
                     type="text"
                     id="clip-input"
+                    class="flex-1 min-w-0"
                     placeholder="Type or paste…"
                     autocomplete="off"
                     spellcheck="false"
@@ -50,30 +67,33 @@
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
                 </button>
             </div>
-            <div class="action-btns">
-                <button id="clear-btn">Clear All</button>
-                <button id="save-btn">Save</button>
+            <div class="action-btns flex gap-2">
+                <button id="clear-btn" class="rounded">Clear All</button>
+                <button id="save-btn" class="rounded flex-1">Save</button>
             </div>
-            <ul id="entries"></ul>
+            <ul id="entries" class="flex flex-col"></ul>
         </section>
     </main>
-    <footer>Made by <a href="https://nipunadodan.com" target="_blank" rel="noopener noreferrer">Nipuna Dodantenna</a> with ❤️ &nbsp;<span id="app-version"></span></footer>
+
+    <footer class="text-center muted">Made by <a href="https://nipunadodan.com" target="_blank" rel="noopener noreferrer">Nipuna Dodantenna</a> with ❤️ &nbsp;<span id="app-version"></span></footer>
+
     <!-- Confirm modal -->
     <div id="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
-        <div class="confirm-box">
+        <div class="confirm-box flex flex-col">
             <p id="confirm-title"></p>
-            <div class="confirm-actions">
-                <button id="confirm-cancel">Cancel</button>
-                <button id="confirm-ok">Delete</button>
+            <div class="confirm-actions flex gap-2 justify-end">
+                <button id="confirm-cancel" class="rounded">Cancel</button>
+                <button id="confirm-ok" class="rounded">Delete</button>
             </div>
         </div>
     </div>
 
-    <div id="offline-notice" aria-live="assertive" aria-atomic="true">
+    <div id="offline-notice" class="flex-col muted" aria-live="assertive" aria-atomic="true">
         <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/><path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/><path d="M10.71 5.05A16 16 0 0 1 22.56 9"/><path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
         <p style="font-size: 1.25rem">You're offline</p>
         <p style="font-size: 0.75rem">Please check your internet connection</p>
     </div>
+
     <script type="module" src="src/main.js"></script>
 </body>
 </html>

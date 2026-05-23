@@ -1,11 +1,20 @@
 {
-  "name": "Clipboard",
-  "short_name": "Clipboard",
+  "name": "Clipit",
+  "short_name": "Clipit",
   "description": "A simple link/clipboard sharing app",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#1a1a2e",
   "theme_color": "#1a1a2e",
+  "share_target": {
+    "action": "/",
+    "method": "GET",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url"
+    }
+  },
   "icons": [
     {
       "src": "icon.svg",
