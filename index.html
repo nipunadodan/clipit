@@ -71,6 +71,14 @@
                 <button id="clear-btn" class="rounded">Clear All</button>
                 <button id="save-btn" class="rounded flex-1">Save</button>
             </div>
+            <div id="share-confirm" class="hidden flex flex-col rounded" role="region" aria-label="Incoming share">
+                <p class="share-confirm-heading muted">Incoming share — select what to save</p>
+                <div id="share-fields" class="flex flex-col"></div>
+                <div class="flex gap-2">
+                    <button id="share-dismiss-btn" class="rounded">Dismiss</button>
+                    <button id="share-save-btn" class="rounded flex-1">Save</button>
+                </div>
+            </div>
             <ul id="entries" class="flex flex-col"></ul>
         </section>
     </main>

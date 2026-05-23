@@ -149,7 +149,7 @@ async function login() {
     const pendingShare = sessionStorage.getItem('clipit.pendingShare');
     if (pendingShare) {
         sessionStorage.removeItem('clipit.pendingShare');
-        await saveSharedText(pendingShare);
+        showShareConfirm(JSON.parse(pendingShare));
     }
 
     input.focus();
@@ -251,6 +251,41 @@ async function togglePin(id, pinned) {
 }
 
 // ── Web Share Target ────────────────────────────────────────
+const shareConfirm    = document.querySelector('#share-confirm');
+const shareFields     = document.querySelector('#share-fields');
+const shareSaveBtn    = document.querySelector('#share-save-btn');
+const shareDismissBtn = document.querySelector('#share-dismiss-btn');
+
+function getShareParams() {
+    const params = new URLSearchParams(window.location.search);
+    const title = params.get('title')?.trim() || null;
+    const text  = params.get('text')?.trim()  || null;
+    const url   = params.get('url')?.trim()   || null;
+    if (!title && !text && !url) return null;
+    return {title, text, url};
+}
+
+function showShareConfirm(params) {
+    shareFields.innerHTML = Object.entries(params)
+        .filter(([, v]) => v)
+        .map(([k, v]) => `
+            <label class="share-field flex items-center gap-2 rounded">
+                <input type="checkbox" class="share-checkbox" value="${escHtml(v)}" checked>
+                <span class="share-field-key">${k}</span>
+                <span class="share-field-val flex-1 min-w-0">${escHtml(v)}</span>
+            </label>
+        `).join('');
+    shareConfirm.classList.remove('hidden');
+}
+
+shareSaveBtn.addEventListener('click', async () => {
+    const checked = [...shareFields.querySelectorAll('.share-checkbox:checked')].map(c => c.value);
+    shareConfirm.classList.add('hidden');
+    if (checked.length) await saveSharedText(checked.join(' '));
+});
+
+shareDismissBtn.addEventListener('click', () => shareConfirm.classList.add('hidden'));
+
 async function saveSharedText(text) {
     const res = await clipitFetch('api.php', 'POST', {text});
     if (res.ok) {
@@ -259,13 +294,6 @@ async function saveSharedText(text) {
     }
 }
 
-function getSharedText() {
-    const params = new URLSearchParams(window.location.search);
-    const parts = [params.get('title'), params.get('text'), params.get('url')]
-        .map(s => s?.trim())
-        .filter(Boolean);
-    return parts.join(' ');
-}
 
 function clearShareParams() {
     const url = new URL(window.location);
@@ -279,19 +307,18 @@ function clearShareParams() {
 
 if (isAuthenticated()) {
     toggleShells(true);
-    const sharedText = getSharedText();
-    if (sharedText) {
+    const shareParams = getShareParams();
+    if (shareParams) {
         clearShareParams();
-        loadEntries().then(() => saveSharedText(sharedText));
+        loadEntries().then(() => showShareConfirm(shareParams));
     } else {
         loadEntries();
     }
 } else {
-    const sharedText = getSharedText();
-    if (sharedText) {
+    const shareParams = getShareParams();
+    if (shareParams) {
         clearShareParams();
-        // Store temporarily so we can pre-fill after login
-        sessionStorage.setItem('clipit.pendingShare', sharedText);
+        sessionStorage.setItem('clipit.pendingShare', JSON.stringify(shareParams));
     }
     toggleShells(false);
     passkeyInput.focus();
