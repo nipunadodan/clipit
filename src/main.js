@@ -258,9 +258,28 @@ const shareDismissBtn = document.querySelector('#share-dismiss-btn');
 
 function getShareParams() {
     const params = new URLSearchParams(window.location.search);
-    const title = params.get('title')?.trim() || null;
-    const text  = params.get('text')?.trim()  || null;
-    const url   = params.get('url')?.trim()   || null;
+    let title = params.get('title')?.trim() || null;
+    let text  = params.get('text')?.trim()  || null;
+    let url   = params.get('url')?.trim()   || null;
+
+    // Android Chrome packs: text = '"Page Title" https://...'
+    if (text && !url) {
+        const m = text.match(/^"([\s\S]+?)"\s+(https?:\/\/\S+)$/);
+        if (m) {
+            url = m[2];
+            const quoted = m[1].trim();
+            if (!title)              { title = quoted; text = null; }
+            else if (quoted === title) { text = null; }
+            else                     { text = quoted; }
+        }
+    }
+
+    // Some share sources put the URL inside `text` and leave `url` empty
+    if (!url && text && isUrl(text)) { url = text; text = null; }
+
+    // Deduplicate: if text and url are identical, keep only url
+    if (url && text === url) text = null;
+
     if (!title && !text && !url) return null;
     return {title, text, url};
 }
