@@ -102,7 +102,11 @@ query("CREATE TABLE IF NOT EXISTS `$table` (
 )");
 
 // Migrate: add pinned column to existing tables that don't have it
-query("ALTER TABLE `$table` ADD COLUMN IF NOT EXISTS `pinned` TINYINT(1) NOT NULL DEFAULT 0");
+$col = db()->query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '$table' AND COLUMN_NAME = 'pinned'");
+if ($col && $col->num_rows === 0) {
+    db()->query("ALTER TABLE `$table` ADD COLUMN `pinned` TINYINT(1) NOT NULL DEFAULT 0");
+}
 
 // --- GET: return stored links ---
 if ($method === 'GET') {

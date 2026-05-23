@@ -236,7 +236,10 @@ clearBtn.addEventListener('click', async () => {
     const ok = await confirm('Clear all entries?');
     if (!ok) return;
     const res = await clipitFetch('api.php', 'DELETE');
-    if (res.ok) render([]);
+    if (res.ok) {
+        const entries = await res.json();
+        render(entries);
+    }
 });
 
 async function togglePin(id, pinned) {
