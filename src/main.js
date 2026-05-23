@@ -21,7 +21,7 @@ function isAuthenticated() {
     const raw = localStorage.getItem(AUTH_STORAGE_KEY);
     if (!raw) return false;
     try {
-        const { expiry } = JSON.parse(raw);
+        const {expiry} = JSON.parse(raw);
         if (Date.now() > expiry) {
             localStorage.removeItem(AUTH_STORAGE_KEY);
             return false;
@@ -35,7 +35,7 @@ function isAuthenticated() {
 
 function setAuthenticated(value) {
     if (value) {
-        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ expiry: Date.now() + AUTH_EXPIRY_MS }));
+        localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({expiry: Date.now() + AUTH_EXPIRY_MS}));
     } else {
         localStorage.removeItem(AUTH_STORAGE_KEY);
     }
@@ -60,13 +60,11 @@ function setFetching(val) {
 
 async function linkFetch(...args) {
     setFetching(true);
-    try {
-        return await fetch(...args);
-    } /*catch (e) {
-        return new Response(null, {status: 500});
-    }*/ finally {
-        setFetching(false);
-    }
+    return await fetch(...args)
+        .catch(e => {
+                console.error('Fetch error:', e);
+        })
+        .finally(() => setFetching(false));
 }
 
 function updateButtonStates() {
@@ -114,7 +112,7 @@ function render(entries) {
 
 async function loadEntries() {
     const res = await linkFetch('api.php');
-    const entries = res.ok ? await res.json() : [];
+    const entries = res && res.ok ? await res.json() : [];
     render(entries);
 }
 
@@ -154,7 +152,8 @@ async function login() {
 pasteBtn.addEventListener('click', async () => {
     try {
         input.value = await navigator.clipboard.readText();
-    } catch {}
+    } catch {
+    }
     input.dispatchEvent(new Event('input'));
     input.focus();
 });
@@ -261,6 +260,7 @@ function clearShareParams() {
     url.searchParams.delete('url');
     history.replaceState(null, '', url.pathname + (url.search !== '?' ? url.search : ''));
 }
+
 // ────────────────────────────────────────────────────────────
 
 if (isAuthenticated()) {
@@ -290,9 +290,9 @@ refreshBtn.addEventListener('click', async () => {
 });
 
 // ── Confirm modal ──────────────────────────────────────────
-const confirmModal   = document.querySelector('#confirm-modal');
-const confirmTitle   = document.querySelector('#confirm-title');
-const confirmOkBtn   = document.querySelector('#confirm-ok');
+const confirmModal = document.querySelector('#confirm-modal');
+const confirmTitle = document.querySelector('#confirm-title');
+const confirmOkBtn = document.querySelector('#confirm-ok');
 const confirmCancelBtn = document.querySelector('#confirm-cancel');
 
 function confirm(message) {
@@ -310,10 +310,14 @@ function confirm(message) {
             resolve(result);
         }
 
-        const onOk      = () => cleanup(true);
-        const onCancel  = () => cleanup(false);
-        const onBackdrop = e => { if (e.target === confirmModal) cleanup(false); };
-        const onKey     = e => { if (e.key === 'Escape') cleanup(false); };
+        const onOk = () => cleanup(true);
+        const onCancel = () => cleanup(false);
+        const onBackdrop = e => {
+            if (e.target === confirmModal) cleanup(false);
+        };
+        const onKey = e => {
+            if (e.key === 'Escape') cleanup(false);
+        };
 
         confirmOkBtn.addEventListener('click', onOk);
         confirmCancelBtn.addEventListener('click', onCancel);
@@ -321,6 +325,7 @@ function confirm(message) {
         document.addEventListener('keydown', onKey);
     });
 }
+
 // ───────────────────────────────────────────────────────────
 
 const offlineNotice = document.querySelector('#offline-notice');
@@ -333,6 +338,7 @@ function updateOnlineStatus() {
     }
     offlineNotice.classList.toggle('visible', !navigator.onLine && !offlineDismissed);
 }
+
 window.addEventListener('online', updateOnlineStatus);
 window.addEventListener('offline', updateOnlineStatus);
 useOfflineBtn.addEventListener('click', () => {
@@ -343,7 +349,8 @@ updateOnlineStatus();
 updateButtonStates();
 
 if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
+    navigator.serviceWorker.register('./sw.js').catch(() => {
+    });
 }
 
 // ── Theme toggle ────────────────────────────────────────────

@@ -17,8 +17,9 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
-    // Only cache GET requests; pass through API calls
-    if (e.request.method !== 'GET' || e.request.url.includes('api.php')) return;
+    // Only cache GET requests; pass through API calls and non-http(s) schemes
+    const url = new URL(e.request.url);
+    if (e.request.method !== 'GET' || e.request.url.includes('api.php') || !url.protocol.startsWith('http')) return;
     e.respondWith(
         fetch(e.request)
             .then(res => {
