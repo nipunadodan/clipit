@@ -4,6 +4,7 @@ const saveBtn = document.querySelector('#save-btn');
 const clearBtn = document.querySelector('#clear-btn');
 const refreshBtn = document.querySelector('#refresh-btn');
 const themeBtn = document.querySelector('#theme-btn');
+const logoutBtn = document.querySelector('#logout-btn');
 const entriesList = document.querySelector('#entries');
 const loginShell = document.querySelector('#login-shell');
 const appShell = document.querySelector('#app-shell');
@@ -69,10 +70,23 @@ async function clipitFetch(url, method = 'GET', data = null, options = {}) {
         }),
         ...options,
     })
+        .then(res => {
+            if (res.status === 401) {
+                handleUnauthorized();
+                return res;
+            }
+            return res;
+        })
         .catch(e => {
             console.error('Fetch error:', e);
         })
         .finally(() => setFetching(false));
+}
+
+function handleUnauthorized() {
+    setAuthenticated(false);
+    toggleShells(false);
+    passkeyInput.focus();
 }
 
 function updateButtonStates() {
@@ -343,8 +357,12 @@ if (isAuthenticated()) {
     passkeyInput.focus();
 }
 
+logoutBtn.addEventListener('click', async () => {
+    await clipitFetch('api.php', 'POST', {logout: true});
+    handleUnauthorized();
+});
+
 refreshBtn.addEventListener('click', async () => {
-    refreshBtn.classList.add('spinning');
     await loadEntries();
     refreshBtn.classList.remove('spinning');
 });

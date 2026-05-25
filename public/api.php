@@ -1,6 +1,75 @@
 <?php
 require_once 'env.php';
 
+// --- Token Management ---
+define('TOKEN_FILE', sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'clipit_tokens.json');
+define('TOKEN_EXPIRY_SEC', 7 * 24 * 3600);
+
+function loadTokens(): array {
+    if (!file_exists(TOKEN_FILE)) return [];
+    $fh = fopen(TOKEN_FILE, 'r');
+    if (!$fh) return [];
+    flock($fh, LOCK_SH);
+    $raw = fread($fh, 1048576);
+    flock($fh, LOCK_UN);
+    fclose($fh);
+    $data = json_decode($raw, true) ?? [];
+    $now  = time();
+    return array_filter($data, fn($expiry) => $expiry > $now);
+}
+
+function saveTokens(array $tokens): void {
+    $fh = fopen(TOKEN_FILE, 'c');
+    if (!$fh) return;
+    flock($fh, LOCK_EX);
+    ftruncate($fh, 0);
+    rewind($fh);
+    fwrite($fh, json_encode($tokens));
+    flock($fh, LOCK_UN);
+    fclose($fh);
+}
+
+function generateToken(): string {
+    $token  = bin2hex(random_bytes(32));
+    $tokens = loadTokens();
+    $tokens[hash('sha256', $token)] = time() + TOKEN_EXPIRY_SEC;
+    saveTokens($tokens);
+    return $token;
+}
+
+function validateToken(): bool {
+    $token = $_COOKIE['clipit_token'] ?? '';
+    if (!$token) return false;
+    $tokens = loadTokens();
+    return isset($tokens[hash('sha256', $token)]);
+}
+
+function setTokenCookie(string $token): void {
+    $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off');
+    setcookie('clipit_token', $token, [
+        'expires'  => time() + TOKEN_EXPIRY_SEC,
+        'path'     => '/',
+        'secure'   => $secure,
+        'httponly' => true,
+        'samesite' => 'Strict',
+    ]);
+}
+
+function revokeToken(): void {
+    $token = $_COOKIE['clipit_token'] ?? '';
+    if ($token) {
+        $tokens = loadTokens();
+        unset($tokens[hash('sha256', $token)]);
+        saveTokens($tokens);
+    }
+    setcookie('clipit_token', '', [
+        'expires'  => time() - 3600,
+        'path'     => '/',
+        'httponly' => true,
+        'samesite' => 'Strict',
+    ]);
+}
+
 // --- Boilerplate ---
 function db(): mysqli {
     static $conn;
@@ -93,6 +162,29 @@ $method = $_SERVER['REQUEST_METHOD'];
 // Apply rate limiting before any SQL read/write
 enforceRateLimit($method);
 
+// --- Auth gate: validate token for all requests except passkey login/logout ---
+// Peek at body for POST to allow passkey and logout through without a token
+$_rawBody = null;
+$_parsedBody = null;
+function getRawBody(): string {
+    global $_rawBody;
+    if ($_rawBody === null) $_rawBody = file_get_contents('php://input');
+    return $_rawBody;
+}
+function getParsedBody(): array {
+    global $_parsedBody;
+    if ($_parsedBody === null) $_parsedBody = json_decode(getRawBody(), true) ?? [];
+    return $_parsedBody;
+}
+
+$isPasskeyLogin  = ($method === 'POST' && array_key_exists('passkey', getParsedBody()));
+$isLogout        = ($method === 'POST' && isset(getParsedBody()['logout']));
+
+if (!$isPasskeyLogin && !$isLogout && !validateToken()) {
+    http_response_code(401);
+    die(json_encode(['error' => 'Unauthorized']));
+}
+
 // --- Ensure table exists ---
 query("CREATE TABLE IF NOT EXISTS `$table` (
     `id`         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -116,7 +208,14 @@ if ($method === 'GET') {
 
 // --- POST: insert new URL, prune to last 5, return current list ---
 if ($method === 'POST') {
-    $body = json_decode(file_get_contents('php://input'), true) ?? [];
+    $body = getParsedBody();
+
+    // Logout
+    if (isset($body['logout'])) {
+        revokeToken();
+        echo json_encode(['authenticated' => false]);
+        exit;
+    }
 
     // Login: verify submitted passkey hash from env.php
     if (array_key_exists('passkey', $body)) {
@@ -130,6 +229,8 @@ if ($method === 'POST') {
             die(json_encode(['error' => 'Invalid passkey']));
         }
 
+        $token = generateToken();
+        setTokenCookie($token);
         echo json_encode(['authenticated' => true]);
         exit;
     }
@@ -152,7 +253,7 @@ if ($method === 'POST') {
 
 // --- DELETE: delete single item by id, or truncate all ---
 if ($method === 'DELETE') {
-    $body = json_decode(file_get_contents('php://input'), true);
+    $body = getParsedBody();
     $id   = isset($body['id']) ? (int)$body['id'] : null;
 
     if ($id) {
@@ -168,7 +269,7 @@ if ($method === 'DELETE') {
 
 // --- PATCH: toggle pin state ---
 if ($method === 'PATCH') {
-    $body   = json_decode(file_get_contents('php://input'), true);
+    $body   = getParsedBody();
     $id     = isset($body['id'])     ? (int)$body['id']           : null;
     $pinned = isset($body['pinned']) ? (int)(bool)$body['pinned'] : null;
 
