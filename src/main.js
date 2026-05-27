@@ -134,10 +134,41 @@ function render(entries) {
     `).join('');
 }
 
+function storeEntries(entries) {
+    if (entries !== undefined) {
+        try {
+            localStorage.setItem('clipit.entries', JSON.stringify(entries));
+        } catch (e) {
+            console.error('Failed to save entries to localStorage:', e);
+        }
+    }
+
+    const stored = localStorage.getItem('clipit.entries');
+    if (stored) {
+        try {
+            return JSON.parse(stored) || [];
+        } catch (e) {
+            console.error('Failed to parse entries from localStorage:', e);
+            return [];
+        }
+    }
+    return [];
+}
+
 async function loadEntries() {
     const res = await clipitFetch('api.php');
-    const entries = res && res.ok ? await res.json() : [];
-    render(entries);
+
+    if (res && res.ok) {
+        try {
+            const entries = await res.json();
+            storeEntries(entries);
+        } catch (e) {
+            console.error('Failed to parse entries from response:', e);
+        }
+    }
+
+    const entriesToRender = storeEntries();
+    render(entriesToRender);
 }
 
 async function login() {
@@ -196,7 +227,9 @@ saveBtn.addEventListener('click', async () => {
         input.value = '';
         input.dispatchEvent(new Event('input'));
         const entries = await res.json();
-        render(entries);
+        // Persist returned entries and render from localStorage
+        storeEntries(entries);
+        render(storeEntries());
     }
 });
 
@@ -241,7 +274,8 @@ entriesList.addEventListener('click', async e => {
         const res = await clipitFetch('api.php', 'DELETE', {id});
         if (res.ok) {
             const entries = await res.json();
-            render(entries);
+            storeEntries(entries);
+            render(storeEntries());
         }
     }
 });
@@ -252,7 +286,8 @@ clearBtn.addEventListener('click', async () => {
     const res = await clipitFetch('api.php', 'DELETE');
     if (res.ok) {
         const entries = await res.json();
-        render(entries);
+        storeEntries(entries);
+        render(storeEntries());
     }
 });
 
@@ -260,7 +295,8 @@ async function togglePin(id, pinned) {
     const res = await clipitFetch('api.php', 'PATCH', {id, pinned});
     if (res && res.ok) {
         const entries = await res.json();
-        render(entries);
+        storeEntries(entries);
+        render(storeEntries());
     }
 }
 
@@ -323,7 +359,8 @@ async function saveSharedText(text) {
     const res = await clipitFetch('api.php', 'POST', {text});
     if (res.ok) {
         const entries = await res.json();
-        render(entries);
+        storeEntries(entries);
+        render(storeEntries());
     }
 }
 
