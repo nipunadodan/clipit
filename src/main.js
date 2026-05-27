@@ -146,6 +146,7 @@ function storeEntries(entries) {
     const stored = localStorage.getItem('clipit.entries');
     if (stored) {
         try {
+            console.log('Stored entries returned:', stored);
             return JSON.parse(stored) || [];
         } catch (e) {
             console.error('Failed to parse entries from localStorage:', e);
