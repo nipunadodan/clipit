@@ -4,8 +4,10 @@ const saveBtn = document.querySelector('#save-btn');
 const clearBtn = document.querySelector('#clear-btn');
 const refreshBtn = document.querySelector('#refresh-btn');
 const themeBtn = document.querySelector('#theme-btn');
+const sortToggle = document.querySelector('#sort-toggle');
 const logoutBtn = document.querySelector('#logout-btn');
 const entriesList = document.querySelector('#entries');
+const entriesCounter = document.querySelector('#entries-counter');
 const loginShell = document.querySelector('#login-shell');
 const appShell = document.querySelector('#app-shell');
 const passkeyInput = document.querySelector('#passkey-input');
@@ -13,10 +15,11 @@ const loginBtn = document.querySelector('#login-btn');
 const loginError = document.querySelector('#login-error');
 
 document.querySelector('#app-version').textContent = `v${__APP_VERSION__}`;
-let isFetching = false;
+let isFetching = false, sortAscending = false;
 const AUTH_STORAGE_KEY = 'clipit.authenticated';
-
-const AUTH_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 1 week
+const SORT_ORDER_KEY = 'clipit.sortOrder';
+const AUTH_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
+const NON_PINNED_LIMIT = 5;
 
 function isAuthenticated() {
     const raw = localStorage.getItem(AUTH_STORAGE_KEY);
@@ -118,13 +121,35 @@ function escHtml(s) {
         .replace(/"/g, '&quot;');
 }
 
+function sortEntries(entries) {
+    const pinned = entries.filter(e => Number(e.pinned) === 1);
+    const unpinned = entries.filter(e => Number(e.pinned) === 0);
+
+    unpinned.sort((a, b) => {
+        const timeA = new Date(a.created_at).getTime();
+        const timeB = new Date(b.created_at).getTime();
+        return sortAscending ? timeA - timeB : timeB - timeA;
+    });
+
+    return [...pinned, ...unpinned];
+}
+
+function updateSortLabel() {
+    sortToggle.textContent = sortAscending ? 'Sort ↓' : 'Sort ↑';
+}
+
 function render(entries) {
+    const nonPinnedUsed = entries.filter(entry => Number(entry.pinned) === 0).length;
+    entriesCounter.textContent = `${nonPinnedUsed}/${NON_PINNED_LIMIT}`;
+
     if (!entries.length) {
         entriesList.innerHTML = '<li class="empty muted text-center">No entries yet</li>';
         return;
     }
-    entriesList.innerHTML = entries.map(entry => `
-        <li class="entry flex items-center rounded${entry.pinned ? ' pinned' : ''}" data-id="${entry.id}" data-pinned="${entry.pinned}">
+
+    const sorted = sortEntries(entries);
+    entriesList.innerHTML = sorted.map(entry => `
+        <li class="entry flex items-center rounded${entry.pinned ? ' pinned' : ''}" data-id="${entry.id}" data-pinned="${entry.pinned}" data-created-at="${escHtml(entry.created_at)}">
             <span class="entry-text flex-1 min-w-0">${escHtml(entry.text)}</span>
             ${isUrl(entry.text) ? `<a class="link-btn icon-btn sm" href="${escHtml(entry.text)}" target="_blank" rel="noopener noreferrer" aria-label="Open link">${LINK_ICON}</a>` : ''}
             <button class="pin-btn icon-btn sm${entry.pinned ? ' active' : ''}" aria-label="${entry.pinned ? 'Unpin' : 'Pin'}">${PIN_ICON}</button>
@@ -204,8 +229,7 @@ async function login() {
 pasteBtn.addEventListener('click', async () => {
     try {
         input.value = await navigator.clipboard.readText();
-    } catch {
-    }
+    } catch {}
     input.dispatchEvent(new Event('input'));
     input.focus();
 });
@@ -259,9 +283,7 @@ entriesList.addEventListener('click', async e => {
                 copyBtn.innerHTML = COPY_ICON;
                 copyBtn.classList.remove('copied');
             }, 1500);
-        } catch {
-            // clipboard write failed silently
-        }
+        } catch {}
     }
 
     const deleteBtn = e.target.closest('.delete-btn');
@@ -301,36 +323,30 @@ async function togglePin(id, pinned) {
     }
 }
 
-// ── Web Share Target ────────────────────────────────────────
-const shareConfirm    = document.querySelector('#share-confirm');
-const shareFields     = document.querySelector('#share-fields');
-const shareSaveBtn    = document.querySelector('#share-save-btn');
+const shareConfirm = document.querySelector('#share-confirm');
+const shareFields = document.querySelector('#share-fields');
+const shareSaveBtn = document.querySelector('#share-save-btn');
 const shareDismissBtn = document.querySelector('#share-dismiss-btn');
 
 function getShareParams() {
     const params = new URLSearchParams(window.location.search);
     let title = params.get('title')?.trim() || null;
-    let text  = params.get('text')?.trim()  || null;
-    let url   = params.get('url')?.trim()   || null;
+    let text = params.get('text')?.trim() || null;
+    let url = params.get('url')?.trim() || null;
 
-    // Android Chrome packs: text = '"Page Title" https://...'
     if (text && !url) {
         const m = text.match(/^"([\s\S]+?)"\s+(https?:\/\/\S+)$/);
         if (m) {
             url = m[2];
             const quoted = m[1].trim();
-            if (!title)              { title = quoted; text = null; }
+            if (!title) { title = quoted; text = null; }
             else if (quoted === title) { text = null; }
-            else                     { text = quoted; }
+            else { text = quoted; }
         }
     }
 
-    // Some share sources put the URL inside `text` and leave `url` empty
     if (!url && text && isUrl(text)) { url = text; text = null; }
-
-    // Deduplicate: if text and url are identical, keep only url
     if (url && text === url) text = null;
-
     if (!title && !text && !url) return null;
     return {title, text, url};
 }
@@ -374,10 +390,10 @@ function clearShareParams() {
     history.replaceState(null, '', url.pathname + (url.search !== '?' ? url.search : ''));
 }
 
-// ────────────────────────────────────────────────────────────
-
 if (isAuthenticated()) {
     toggleShells(true);
+    sortAscending = localStorage.getItem(SORT_ORDER_KEY) === 'asc';
+    updateSortLabel();
     const shareParams = getShareParams();
     if (shareParams) {
         clearShareParams();
@@ -401,11 +417,18 @@ logoutBtn.addEventListener('click', async () => {
 });
 
 refreshBtn.addEventListener('click', async () => {
+    refreshBtn.classList.add('spinning');
     await loadEntries();
     refreshBtn.classList.remove('spinning');
 });
 
-// ── Confirm modal ──────────────────────────────────────────
+sortToggle.addEventListener('click', () => {
+    sortAscending = !sortAscending;
+    localStorage.setItem(SORT_ORDER_KEY, sortAscending ? 'asc' : 'desc');
+    updateSortLabel();
+    loadEntries();
+});
+
 const confirmModal = document.querySelector('#confirm-modal');
 const confirmTitle = document.querySelector('#confirm-title');
 const confirmOkBtn = document.querySelector('#confirm-ok');
@@ -464,12 +487,8 @@ useOfflineBtn.addEventListener('click', () => {
 updateOnlineStatus();
 updateButtonStates();
 
-if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js').catch(() => {
-    });
-}
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
 
-// ── Theme toggle ────────────────────────────────────────────
 const THEME_KEY = 'clipit.theme';
 
 function applyTheme(theme) {
@@ -480,18 +499,13 @@ function applyTheme(theme) {
     }
 }
 
-// Restore saved theme on load (initial state already handled by inline script in <head>)
 const _savedTheme = localStorage.getItem(THEME_KEY);
 if (_savedTheme) applyTheme(_savedTheme);
 
 themeBtn.addEventListener('click', () => {
     const current = document.documentElement.getAttribute('data-theme');
-    const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    // Determine effective current mode
-    const isDark = current === 'dark' || (!current && systemDark);
+    const isDark = current === 'dark' || (!current && window.matchMedia('(prefers-color-scheme: dark)').matches);
     const next = isDark ? 'light' : 'dark';
     applyTheme(next);
     localStorage.setItem(THEME_KEY, next);
 });
-// ────────────────────────────────────────────────────────────
-
