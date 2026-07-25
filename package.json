@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "deploy:local": "vite build && mkdir -p ~/html/nsd/clipit && cp -r dist/. ~/html/nsd/clipit/"
+    "deploy:local": "vite build && rm -rf ~/html/nsd/clipit && mkdir -p ~/html/nsd/clipit && cp -r dist/. ~/html/nsd/clipit/"
   },
   "devDependencies": {
     "vite": "8.0.5"
