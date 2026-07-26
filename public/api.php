@@ -267,13 +267,31 @@ if ($method === 'DELETE') {
     exit;
 }
 
-// --- PATCH: toggle pin state ---
+// --- PATCH: edit text or toggle pin state ---
 if ($method === 'PATCH') {
-    $body   = getParsedBody();
-    $id     = isset($body['id'])     ? (int)$body['id']           : null;
-    $pinned = isset($body['pinned']) ? (int)(bool)$body['pinned'] : null;
+    $body = getParsedBody();
+    $id   = isset($body['id']) ? (int)$body['id'] : null;
 
-    if (!$id || $pinned === null) {
+    if (!$id) {
+        http_response_code(400);
+        die(json_encode(['error' => 'Invalid request']));
+    }
+
+    // Edit entry text
+    if (array_key_exists('text', $body)) {
+        $text = trim((string)$body['text']);
+        if ($text === '') {
+            http_response_code(400);
+            die(json_encode(['error' => 'No text provided']));
+        }
+        query("UPDATE `$table` SET text = ? WHERE id = ?", 'si', $text, $id);
+        echo json_encode(fetchLinks($table));
+        exit;
+    }
+
+    // Toggle pin state
+    $pinned = isset($body['pinned']) ? (int)(bool)$body['pinned'] : null;
+    if ($pinned === null) {
         http_response_code(400);
         die(json_encode(['error' => 'Invalid request']));
     }
