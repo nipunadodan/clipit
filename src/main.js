@@ -59,6 +59,46 @@ function updateLoginState() {
     loginBtn.disabled = empty || isFetching;
 }
 
+// Section: Pasted image state
+let pastedImage = null;
+let pastedImageUrl = null;
+const imagePreview = document.querySelector('#image-preview');
+const imagePreviewImg = document.querySelector('#image-preview-img');
+const imageRemoveBtn = document.querySelector('#image-remove-btn');
+
+function setPastedImage(blob) {
+    if (pastedImageUrl) URL.revokeObjectURL(pastedImageUrl);
+    pastedImage = blob;
+    pastedImageUrl = blob ? URL.createObjectURL(blob) : null;
+    imagePreviewImg.src = pastedImageUrl || '';
+    imagePreview.classList.toggle('hidden', !blob);
+    updateButtonStates();
+}
+
+input.addEventListener('paste', e => {
+    const item = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith('image/'));
+    if (!item) return;
+    const blob = item.getAsFile();
+    if (!blob) return;
+    if (![...e.clipboardData.items].some(i => i.type === 'text/plain')) e.preventDefault();
+    setPastedImage(blob);
+});
+
+imageRemoveBtn.addEventListener('click', () => setPastedImage(null));
+
+async function copyImageToClipboard(src) {
+    let blob = await (await fetch(src)).blob();
+    if (blob.type !== 'image/png') {
+        const bmp = await createImageBitmap(blob);
+        const canvas = document.createElement('canvas');
+        canvas.width = bmp.width;
+        canvas.height = bmp.height;
+        canvas.getContext('2d').drawImage(bmp, 0, 0);
+        blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+    }
+    await navigator.clipboard.write([new ClipboardItem({'image/png': blob})]);
+}
+
 function setFetching(val) {
     isFetching = val;
     updateButtonStates();
@@ -96,7 +136,7 @@ function handleUnauthorized() {
 }
 
 function updateButtonStates() {
-    const empty = !input.value.trim();
+    const empty = !input.value.trim() && !pastedImage;
     saveBtn.disabled = empty || isFetching;
     clearBtn.disabled = isFetching;
     updateLoginState();
@@ -110,6 +150,8 @@ const LINK_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15
 const PIN_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></svg>`;
 const MENU_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>`;
 const EDIT_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>`;
+
+const IMAGE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`;
 
 function isUrl(s) {
     try {
@@ -162,6 +204,7 @@ function render(entries) {
             </div>
             ${isUrl(entry.text) ? `<a class="link-btn icon-btn sm" href="${escHtml(entry.text)}" target="_blank" rel="noopener noreferrer" aria-label="Open link">${LINK_ICON}</a>` : ''}
             <button class="pin-btn icon-btn sm${entry.pinned ? ' active' : ''}" aria-label="${entry.pinned ? 'Unpin' : 'Pin'}">${PIN_ICON}</button>
+            ${entry.image ? `<button class="copy-image-btn icon-btn sm" data-image="${escHtml(String(entry.image))}" aria-label="Copy image">${IMAGE_ICON}</button>` : ''}
             <button class="copy-btn icon-btn sm" aria-label="Copy">${COPY_ICON}</button>
             <div class="entry-menu">
                 <button class="menu-btn icon-btn sm" aria-label="More actions" aria-haspopup="true" aria-expanded="false">${MENU_ICON}</button>
@@ -262,10 +305,20 @@ passkeyInput.addEventListener('keydown', e => {
 
 saveBtn.addEventListener('click', async () => {
     const text = input.value.trim();
-    if (!text) return;
+    if (!text && !pastedImage) return;
 
-    const res = await clipitFetch('api.php', 'POST', {text});
-    if (res.ok) {
+    let res;
+    if (pastedImage) {
+        const form = new FormData();
+        form.append('image', pastedImage, 'image');
+        form.append('text', text);
+        // Empty headers so the browser sets the multipart boundary
+        res = await clipitFetch('image.php', 'POST', null, {headers: {}, body: form});
+    } else {
+        res = await clipitFetch('api.php', 'POST', {text});
+    }
+    if (res && res.ok) {
+        setPastedImage(null);
         input.value = '';
         input.dispatchEvent(new Event('input'));
         const entries = await res.json();
@@ -305,6 +358,22 @@ entriesList.addEventListener('click', async e => {
         const id = Number(li.dataset.id);
         const currentlyPinned = li.dataset.pinned === '1';
         await togglePin(id, !currentlyPinned);
+        return;
+    }
+
+    const copyImageBtn = e.target.closest('.copy-image-btn');
+    if (copyImageBtn) {
+        try {
+            await copyImageToClipboard(copyImageBtn.dataset.image);
+            copyImageBtn.innerHTML = CHECK_ICON;
+            copyImageBtn.classList.add('copied');
+            setTimeout(() => {
+                copyImageBtn.innerHTML = IMAGE_ICON;
+                copyImageBtn.classList.remove('copied');
+            }, 1500);
+        } catch (err) {
+            console.error('Failed to copy image:', err);
+        }
         return;
     }
 
