@@ -45,6 +45,8 @@ npm run build
 
 Output is placed in `dist/`. Deploy the contents to your server. The table is created automatically on first request; the `pinned` column is added via a migration check if you're upgrading an existing install.
 
+On Windows, run `npm run deploy:local:windows` to build and copy the contents of `dist/` to `C:\Users\Nipuna_Hatchyard\Projects\nsd\wamp\www\clipit`. Matching files are overwritten; unrelated destination files are preserved.
+
 ### Environment / Backend Config
 
 Copy `public/env-sample.php` to `public/env.php` and fill in your database credentials. This file is gitignored and never deployed automatically.

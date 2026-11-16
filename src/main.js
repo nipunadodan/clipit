@@ -21,6 +21,7 @@ const AUTH_STORAGE_KEY = 'clipit.authenticated';
 const SORT_ORDER_KEY = 'clipit.sortOrder';
 const AUTH_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
 const NON_PINNED_LIMIT = 5;
+const BASE_API_URL = import.meta.env.VITE_BASE_API_URL ?? '';
 
 function isAuthenticated() {
     const raw = localStorage.getItem(AUTH_STORAGE_KEY);
@@ -108,7 +109,7 @@ function setFetching(val) {
 async function clipitFetch(url, method = 'GET', data = null, options = {}) {
     setFetching(true);
     const isGet = method === 'GET';
-    return await fetch(url, {
+    return await fetch(`${BASE_API_URL}${url}`, {
         method,
         ...(!isGet && {
             headers: {'Content-Type': 'application/json'},

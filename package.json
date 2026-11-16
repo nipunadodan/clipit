@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "deploy:local": "vite build && rm -rf ~/html/nsd/clipit && mkdir -p ~/html/nsd/clipit && cp -r dist/. ~/html/nsd/clipit/"
+    "deploy:local": "vite build && rm -rf ~/html/nsd/clipit && mkdir -p ~/html/nsd/clipit && cp -r dist/. ~/html/nsd/clipit/",
+    "deploy:local:windows": "vite build && powershell -NoProfile -Command \"$ErrorActionPreference = 'Stop'; New-Item -ItemType Directory -Path 'C:\\Users\\Nipuna_Hatchyard\\Projects\\nsd\\wamp\\www\\clipit' -Force | Out-Null; Copy-Item -Path 'dist\\*' -Destination 'C:\\Users\\Nipuna_Hatchyard\\Projects\\nsd\\wamp\\www\\clipit' -Recurse -Force\""
   },
   "devDependencies": {
     "vite": "8.0.5"
