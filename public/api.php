@@ -190,6 +190,7 @@ query("CREATE TABLE IF NOT EXISTS `$table` (
     `id`         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     `text`       VARCHAR(2048) NOT NULL,
     `pinned`     TINYINT(1) NOT NULL DEFAULT 0,
+    `image`      MEDIUMBLOB,
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 )");
 
