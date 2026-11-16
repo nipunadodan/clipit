@@ -21,6 +21,8 @@ const AUTH_STORAGE_KEY = 'clipit.authenticated';
 const SORT_ORDER_KEY = 'clipit.sortOrder';
 const AUTH_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
 const NON_PINNED_LIMIT = 5;
+const MAX_IMAGE_SIZE = 16777215;
+const BASE_API_URL = import.meta.env.VITE_BASE_API_URL ?? '';
 
 function isAuthenticated() {
     const raw = localStorage.getItem(AUTH_STORAGE_KEY);
@@ -59,6 +61,50 @@ function updateLoginState() {
     loginBtn.disabled = empty || isFetching;
 }
 
+// Section: Pasted image state
+let pastedImage = null;
+let pastedImageUrl = null;
+const imagePreview = document.querySelector('#image-preview');
+const imagePreviewImg = document.querySelector('#image-preview-img');
+const imageRemoveBtn = document.querySelector('#image-remove-btn');
+
+function setPastedImage(blob) {
+    if (pastedImageUrl) URL.revokeObjectURL(pastedImageUrl);
+    pastedImage = blob;
+    pastedImageUrl = blob ? URL.createObjectURL(blob) : null;
+    imagePreviewImg.src = pastedImageUrl || '';
+    imagePreview.classList.toggle('hidden', !blob);
+    updateButtonStates();
+}
+
+input.addEventListener('paste', e => {
+    const item = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith('image/'));
+    if (!item) return;
+    const blob = item.getAsFile();
+    if (!blob) return;
+    if (![...e.clipboardData.items].some(i => i.type === 'text/plain')) e.preventDefault();
+    setPastedImage(blob);
+});
+
+imageRemoveBtn.setAttribute('aria-label', 'Discard pasted image');
+imageRemoveBtn.title = 'Discard pasted image';
+imageRemoveBtn.addEventListener('click', () => setPastedImage(null));
+
+async function copyImageToClipboard(id) {
+    const res = await clipitFetch(`api.php?image=${encodeURIComponent(id)}`);
+    if (!res || !res.ok) throw new Error('Could not retrieve image');
+    let blob = await res.blob();
+    if (blob.type !== 'image/png') {
+        const bmp = await createImageBitmap(blob);
+        const canvas = document.createElement('canvas');
+        canvas.width = bmp.width;
+        canvas.height = bmp.height;
+        canvas.getContext('2d').drawImage(bmp, 0, 0);
+        blob = await new Promise(r => canvas.toBlob(r, 'image/png'));
+    }
+    await navigator.clipboard.write([new ClipboardItem({'image/png': blob})]);
+}
+
 function setFetching(val) {
     isFetching = val;
     updateButtonStates();
@@ -68,7 +114,7 @@ function setFetching(val) {
 async function clipitFetch(url, method = 'GET', data = null, options = {}) {
     setFetching(true);
     const isGet = method === 'GET';
-    return await fetch(url, {
+    return await fetch(`${BASE_API_URL}${url}`, {
         method,
         ...(!isGet && {
             headers: {'Content-Type': 'application/json'},
@@ -96,7 +142,7 @@ function handleUnauthorized() {
 }
 
 function updateButtonStates() {
-    const empty = !input.value.trim();
+    const empty = !input.value.trim() && !pastedImage;
     saveBtn.disabled = empty || isFetching;
     clearBtn.disabled = isFetching;
     updateLoginState();
@@ -110,6 +156,8 @@ const LINK_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15
 const PIN_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></svg>`;
 const MENU_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>`;
 const EDIT_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>`;
+
+const IMAGE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/><circle cx="13" cy="13" r="1"/><path d="m21 18-3-3-6 6"/></svg>`;
 
 function isUrl(s) {
     try {
@@ -128,8 +176,10 @@ function escHtml(s) {
 }
 
 function sortEntries(entries) {
-    const pinned = entries.filter(e => Number(e.pinned) === 1);
-    const unpinned = entries.filter(e => Number(e.pinned) === 0);
+    const images = entries.filter(e => Number(e.image) === 1);
+    const normal = entries.filter(e => Number(e.image) !== 1);
+    const pinned = normal.filter(e => Number(e.pinned) === 1);
+    const unpinned = normal.filter(e => Number(e.pinned) === 0);
 
     unpinned.sort((a, b) => {
         const timeA = new Date(a.created_at).getTime();
@@ -137,7 +187,7 @@ function sortEntries(entries) {
         return sortAscending ? timeA - timeB : timeB - timeA;
     });
 
-    return [...pinned, ...unpinned];
+    return [...images, ...pinned, ...unpinned];
 }
 
 function updateSortLabel() {
@@ -156,12 +206,14 @@ function render(entries) {
     const sorted = sortEntries(entries);
     entriesList.innerHTML = sorted.map(entry => `
         <li class="entry flex items-center rounded${entry.pinned ? ' pinned' : ''}" data-id="${entry.id}" data-pinned="${entry.pinned}" data-created-at="${escHtml(entry.created_at)}">
+            ${Number(entry.image) === 1 ? `<img class="entry-thumbnail" src="${escHtml(`${BASE_API_URL}api.php?image=${encodeURIComponent(entry.id)}`)}" alt="Image thumbnail">` : ''}
             <div class="flex flex-col flex-1 min-w-0 gap-1">
                 <span class="entry-text flex-1 min-w-0">${escHtml(entry.text)}</span>
                 <span class="entry-text-muted flex-1 min-w-0 text-xs text-zinc-500">${escHtml(entry.created_at)}</span>
             </div>
             ${isUrl(entry.text) ? `<a class="link-btn icon-btn sm" href="${escHtml(entry.text)}" target="_blank" rel="noopener noreferrer" aria-label="Open link">${LINK_ICON}</a>` : ''}
-            <button class="pin-btn icon-btn sm${entry.pinned ? ' active' : ''}" aria-label="${entry.pinned ? 'Unpin' : 'Pin'}">${PIN_ICON}</button>
+            ${Number(entry.image) !== 1 ? `<button class="pin-btn icon-btn sm${entry.pinned ? ' active' : ''}" aria-label="${entry.pinned ? 'Unpin' : 'Pin'}">${PIN_ICON}</button>` : ''}
+            ${Number(entry.image) === 1 ? `<button class="copy-image-btn icon-btn sm" data-image="${entry.id}" aria-label="Copy image">${IMAGE_ICON}</button>` : ''}
             <button class="copy-btn icon-btn sm" aria-label="Copy">${COPY_ICON}</button>
             <div class="entry-menu">
                 <button class="menu-btn icon-btn sm" aria-label="More actions" aria-haspopup="true" aria-expanded="false">${MENU_ICON}</button>
@@ -262,16 +314,34 @@ passkeyInput.addEventListener('keydown', e => {
 
 saveBtn.addEventListener('click', async () => {
     const text = input.value.trim();
-    if (!text) return;
+    if (!text && !pastedImage) return;
+    if (pastedImage && pastedImage.size > MAX_IMAGE_SIZE) {
+        await showAlert('Image exceeds the MEDIUMBLOB limit (16 MiB minus 1 byte).');
+        return;
+    }
 
-    const res = await clipitFetch('api.php', 'POST', {text});
-    if (res.ok) {
+    let res;
+    if (pastedImage) {
+        const form = new FormData();
+        form.append('image', pastedImage, 'image');
+        form.append('text', text);
+        // Empty headers so the browser sets the multipart boundary
+        res = await clipitFetch('api.php', 'POST', null, {headers: {}, body: form});
+    } else {
+        res = await clipitFetch('api.php', 'POST', {text});
+    }
+    if (res && res.ok) {
+        setPastedImage(null);
         input.value = '';
         input.dispatchEvent(new Event('input'));
         const entries = await res.json();
         // Persist returned entries and render from localStorage
         storeEntries(entries);
         render(storeEntries());
+    } else if (res && res.status !== 401) {
+        const error = await res.json();
+        console.error('Failed to save entry:', error);
+        await showAlert(error.error || 'Failed to save entry');
     }
 });
 
@@ -305,6 +375,22 @@ entriesList.addEventListener('click', async e => {
         const id = Number(li.dataset.id);
         const currentlyPinned = li.dataset.pinned === '1';
         await togglePin(id, !currentlyPinned);
+        return;
+    }
+
+    const copyImageBtn = e.target.closest('.copy-image-btn');
+    if (copyImageBtn) {
+        try {
+            await copyImageToClipboard(copyImageBtn.dataset.image);
+            copyImageBtn.innerHTML = CHECK_ICON;
+            copyImageBtn.classList.add('copied');
+            setTimeout(() => {
+                copyImageBtn.innerHTML = IMAGE_ICON;
+                copyImageBtn.classList.remove('copied');
+            }, 1500);
+        } catch (err) {
+            console.error('Failed to copy image:', err);
+        }
         return;
     }
 
@@ -546,14 +632,18 @@ const confirmTitle = document.querySelector('#confirm-title');
 const confirmOkBtn = document.querySelector('#confirm-ok');
 const confirmCancelBtn = document.querySelector('#confirm-cancel');
 
-function confirm(message) {
+function confirm(message, alertOnly = false) {
     return new Promise(resolve => {
         confirmTitle.textContent = message;
+        confirmOkBtn.textContent = alertOnly ? 'OK' : 'Delete';
+        confirmCancelBtn.hidden = alertOnly;
         confirmModal.classList.add('visible');
         confirmOkBtn.focus();
 
         function cleanup(result) {
             confirmModal.classList.remove('visible');
+            confirmOkBtn.textContent = 'Delete';
+            confirmCancelBtn.hidden = false;
             confirmOkBtn.removeEventListener('click', onOk);
             confirmCancelBtn.removeEventListener('click', onCancel);
             confirmModal.removeEventListener('click', onBackdrop);
@@ -575,6 +665,10 @@ function confirm(message) {
         confirmModal.addEventListener('click', onBackdrop);
         document.addEventListener('keydown', onKey);
     });
+}
+
+function showAlert(message) {
+    return confirm(message, true);
 }
 
 // Section: Offline notice, service worker, and theme handling

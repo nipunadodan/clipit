@@ -88,9 +88,45 @@ function query(string $sql, string $types = '', ...$params): mysqli_stmt {
 }
 
 function fetchLinks(string $table): array {
-    return query("SELECT id, text, pinned, created_at FROM `$table` ORDER BY pinned DESC, created_at DESC")
+    return query("SELECT id, text, pinned, image IS NOT NULL AS image, created_at FROM `$table` ORDER BY pinned DESC, created_at DESC")
         ->get_result()
         ->fetch_all(MYSQLI_ASSOC);
+}
+
+function imageMime(string $image): ?string {
+    $info = @getimagesizefromstring($image);
+    $mime = $info['mime'] ?? null;
+    return in_array($mime, ['image/png', 'image/jpeg', 'image/gif', 'image/webp'], true) ? $mime : null;
+}
+
+function readUploadedImage(): ?string {
+    if (!isset($_FILES['image'])) return null;
+
+    $file = $_FILES['image'];
+    $error = $file['error'] ?? null;
+    if ($error !== UPLOAD_ERR_OK) {
+        http_response_code(in_array($error, [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true) ? 413 : 400);
+        die(json_encode(['error' => 'Image upload failed. Check the file size and PHP upload limits.']));
+    }
+    if (!is_string($file['tmp_name'] ?? null) || !is_int($file['size'] ?? null) || !is_uploaded_file($file['tmp_name'])) {
+        http_response_code(400);
+        die(json_encode(['error' => 'Invalid image upload']));
+    }
+    if ($file['size'] > 16777215) {
+        http_response_code(413);
+        die(json_encode(['error' => 'Image exceeds the MEDIUMBLOB limit (16 MiB minus 1 byte)']));
+    }
+
+    $image = file_get_contents($file['tmp_name']);
+    if ($image === false) {
+        http_response_code(500);
+        die(json_encode(['error' => 'Could not read uploaded image']));
+    }
+    if (imageMime($image) === null) {
+        http_response_code(400);
+        die(json_encode(['error' => 'Upload a PNG, JPEG, GIF or WebP image']));
+    }
+    return $image;
 }
 
 // --- Rate Limiting (file-based, no DB) ---
@@ -173,7 +209,11 @@ function getRawBody(): string {
 }
 function getParsedBody(): array {
     global $_parsedBody;
-    if ($_parsedBody === null) $_parsedBody = json_decode(getRawBody(), true) ?? [];
+    if ($_parsedBody === null) {
+        $_parsedBody = stripos($_SERVER['CONTENT_TYPE'] ?? '', 'multipart/form-data') === 0
+            ? $_POST
+            : (json_decode(getRawBody(), true) ?? []);
+    }
     return $_parsedBody;
 }
 
@@ -190,6 +230,7 @@ query("CREATE TABLE IF NOT EXISTS `$table` (
     `id`         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     `text`       VARCHAR(2048) NOT NULL,
     `pinned`     TINYINT(1) NOT NULL DEFAULT 0,
+    `image`      MEDIUMBLOB,
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 )");
 
@@ -200,8 +241,39 @@ if ($col && $col->num_rows === 0) {
     db()->query("ALTER TABLE `$table` ADD COLUMN `pinned` TINYINT(1) NOT NULL DEFAULT 0");
 }
 
+$col = query("SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = 'image'", 's', $table)
+    ->get_result();
+if ($col->num_rows === 0) {
+    query("ALTER TABLE `$table` ADD COLUMN `image` MEDIUMBLOB");
+}
+
 // --- GET: return stored links ---
 if ($method === 'GET') {
+    if (isset($_GET['image'])) {
+        $id = filter_var($_GET['image'], FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+        if ($id === false) {
+            http_response_code(400);
+            die(json_encode(['error' => 'Invalid image ID']));
+        }
+        $entry = query("SELECT image FROM `$table` WHERE id = ?", 'i', $id)
+            ->get_result()->fetch_assoc();
+        if (!$entry || $entry['image'] === null) {
+            http_response_code(404);
+            die(json_encode(['error' => 'Image not found']));
+        }
+        $mime = imageMime($entry['image']);
+        if ($mime === null) {
+            http_response_code(500);
+            die(json_encode(['error' => 'Stored image is invalid']));
+        }
+        header('Content-Type: ' . $mime);
+        header('Content-Length: ' . strlen($entry['image']));
+        header('Cache-Control: private, no-store');
+        header('X-Content-Type-Options: nosniff');
+        echo $entry['image'];
+        exit;
+    }
     echo json_encode(fetchLinks($table));
     exit;
 }
@@ -235,10 +307,40 @@ if ($method === 'POST') {
         exit;
     }
 
-    $text = $body['text'] ?? null;
-    if (!$text) { http_response_code(400); die(json_encode(['error' => 'No text provided'])); }
+    $text = $body['text'] ?? '';
+    $image = readUploadedImage();
+    if (!is_string($text) || (trim($text) === '' && $image === null)) {
+        http_response_code(400);
+        die(json_encode(['error' => 'Provide text or an image']));
+    }
 
-    query("INSERT INTO `$table` (text, created_at) VALUES (?, NOW())", 's', $text);
+    if ($image !== null) {
+        $lock = 'clipit:image:' . md5(DB . ':' . $table);
+        $locked = query("SELECT GET_LOCK(?, 5) AS acquired", 's', $lock)->get_result()->fetch_assoc();
+        if ((int)$locked['acquired'] !== 1) {
+            http_response_code(503);
+            die(json_encode(['error' => 'Another image is being saved. Please try again.']));
+        }
+
+        $saved = false;
+        try {
+            db()->begin_transaction();
+            query("DELETE FROM `$table` WHERE image IS NOT NULL");
+            query("INSERT INTO `$table` (text, image, created_at) VALUES (?, ?, NOW())", 'ss', $text, $image);
+            db()->commit();
+            $saved = true;
+        } catch (mysqli_sql_exception $e) {
+            db()->rollback();
+            error_log('Image replacement failed: ' . $e->getMessage());
+            http_response_code(500);
+            echo json_encode(['error' => 'Could not save image']);
+        } finally {
+            query("SELECT RELEASE_LOCK(?)", 's', $lock);
+        }
+        if (!$saved) exit;
+    } else {
+        query("INSERT INTO `$table` (text, image, created_at) VALUES (?, ?, NOW())", 'ss', $text, $image);
+    }
 
     // Prune unpinned items only, keeping the latest 5
     query("DELETE FROM `$table` WHERE pinned = 0 AND id NOT IN (
