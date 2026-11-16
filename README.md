@@ -27,7 +27,7 @@ A lightweight, self-hosted clipboard & link-sharing PWA. Save URLs and snippets 
 ### Prerequisites
 
 - Node.js ≥ 22
-- A PHP-capable web server with MySQL
+- A PHP-capable web server with MySQL and the PHP MySQLi extension
 
 ### Development
 
@@ -43,7 +43,7 @@ npm run dev
 npm run build
 ```
 
-Output is placed in `dist/`. Deploy the contents to your server. The table is created automatically on first request; the `pinned` column is added via a migration check if you're upgrading an existing install.
+Output is placed in `dist/`. Deploy the contents to your server. The table is created automatically on first request; missing `pinned` and `image` columns are added via migration checks if you're upgrading an existing install.
 
 On Windows, run `npm run deploy:local:windows` to build and copy the contents of `dist/` to `C:\Users\Nipuna_Hatchyard\Projects\nsd\wamp\www\clipit`. Matching files are overwritten; unrelated destination files are preserved.
 
@@ -74,15 +74,21 @@ Copy `public/env-sample.php` to `public/env.php` and fill in your database crede
 | Method   | Body / Params              | Description                              |
 |----------|----------------------------|------------------------------------------|
 | `GET`    | —                          | Return all entries (pinned first)        |
+| `GET`    | `?image=<id>`               | Retrieve an entry's image bytes (authenticated) |
 | `POST`   | `{ passkey }`              | Authenticate                             |
 | `POST`   | `{ text }`                 | Save a new entry; prunes unpinned to 5   |
+| `POST`   | Multipart `image`, optional `text` | Save an image with an optional caption; prunes unpinned to 5 |
 | `DELETE` | `{ id }`                   | Delete a single entry                    |
 | `DELETE` | —                          | Delete all **unpinned** entries          |
 | `PATCH`  | `{ id, pinned }`           | Pin or unpin an entry                    |
 
 Rate limiting is file-based (no extra DB table): 60 GET / 10 POST / 30 PATCH requests per IP per 60 s.
 
+Images are stored as raw bytes in the `image` MEDIUMBLOB column. List responses include `image: 1` when an image exists and `image: 0` otherwise, not the binary data. The copy-image action retrieves the bytes on demand through `api.php?image=<id>`. PNG, JPEG, GIF and WebP uploads are supported, up to the MEDIUMBLOB limit of 16 MiB minus 1 byte; PHP's `upload_max_filesize`, `post_max_size` (including multipart overhead) and MySQL's `max_allowed_packet` must also accommodate the upload.
+
 ## Pinning
+
+Only one image entry is kept at a time. Saving a new image deletes the previous image entry (including its text), even if it is pinned. Invalid uploads or failed replacements leave the previous entry intact.
 
 Pinned items are shown at the top of the list and are exempt from:
 - the 5-item auto-prune that runs on every new save

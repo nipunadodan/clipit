@@ -21,6 +21,7 @@ const AUTH_STORAGE_KEY = 'clipit.authenticated';
 const SORT_ORDER_KEY = 'clipit.sortOrder';
 const AUTH_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
 const NON_PINNED_LIMIT = 5;
+const MAX_IMAGE_SIZE = 16777215;
 const BASE_API_URL = import.meta.env.VITE_BASE_API_URL ?? '';
 
 function isAuthenticated() {
@@ -85,10 +86,14 @@ input.addEventListener('paste', e => {
     setPastedImage(blob);
 });
 
+imageRemoveBtn.setAttribute('aria-label', 'Discard pasted image');
+imageRemoveBtn.title = 'Discard pasted image';
 imageRemoveBtn.addEventListener('click', () => setPastedImage(null));
 
-async function copyImageToClipboard(src) {
-    let blob = await (await fetch(src)).blob();
+async function copyImageToClipboard(id) {
+    const res = await clipitFetch(`api.php?image=${encodeURIComponent(id)}`);
+    if (!res || !res.ok) throw new Error('Could not retrieve image');
+    let blob = await res.blob();
     if (blob.type !== 'image/png') {
         const bmp = await createImageBitmap(blob);
         const canvas = document.createElement('canvas');
@@ -152,7 +157,7 @@ const PIN_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15"
 const MENU_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>`;
 const EDIT_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>`;
 
-const IMAGE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`;
+const IMAGE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/><circle cx="13" cy="13" r="1"/><path d="m21 18-3-3-6 6"/></svg>`;
 
 function isUrl(s) {
     try {
@@ -171,8 +176,10 @@ function escHtml(s) {
 }
 
 function sortEntries(entries) {
-    const pinned = entries.filter(e => Number(e.pinned) === 1);
-    const unpinned = entries.filter(e => Number(e.pinned) === 0);
+    const images = entries.filter(e => Number(e.image) === 1);
+    const normal = entries.filter(e => Number(e.image) !== 1);
+    const pinned = normal.filter(e => Number(e.pinned) === 1);
+    const unpinned = normal.filter(e => Number(e.pinned) === 0);
 
     unpinned.sort((a, b) => {
         const timeA = new Date(a.created_at).getTime();
@@ -180,7 +187,7 @@ function sortEntries(entries) {
         return sortAscending ? timeA - timeB : timeB - timeA;
     });
 
-    return [...pinned, ...unpinned];
+    return [...images, ...pinned, ...unpinned];
 }
 
 function updateSortLabel() {
@@ -199,13 +206,14 @@ function render(entries) {
     const sorted = sortEntries(entries);
     entriesList.innerHTML = sorted.map(entry => `
         <li class="entry flex items-center rounded${entry.pinned ? ' pinned' : ''}" data-id="${entry.id}" data-pinned="${entry.pinned}" data-created-at="${escHtml(entry.created_at)}">
+            ${Number(entry.image) === 1 ? `<img class="entry-thumbnail" src="${escHtml(`${BASE_API_URL}api.php?image=${encodeURIComponent(entry.id)}`)}" alt="Image thumbnail">` : ''}
             <div class="flex flex-col flex-1 min-w-0 gap-1">
                 <span class="entry-text flex-1 min-w-0">${escHtml(entry.text)}</span>
                 <span class="entry-text-muted flex-1 min-w-0 text-xs text-zinc-500">${escHtml(entry.created_at)}</span>
             </div>
             ${isUrl(entry.text) ? `<a class="link-btn icon-btn sm" href="${escHtml(entry.text)}" target="_blank" rel="noopener noreferrer" aria-label="Open link">${LINK_ICON}</a>` : ''}
-            <button class="pin-btn icon-btn sm${entry.pinned ? ' active' : ''}" aria-label="${entry.pinned ? 'Unpin' : 'Pin'}">${PIN_ICON}</button>
-            ${entry.image ? `<button class="copy-image-btn icon-btn sm" data-image="${escHtml(String(entry.image))}" aria-label="Copy image">${IMAGE_ICON}</button>` : ''}
+            ${Number(entry.image) !== 1 ? `<button class="pin-btn icon-btn sm${entry.pinned ? ' active' : ''}" aria-label="${entry.pinned ? 'Unpin' : 'Pin'}">${PIN_ICON}</button>` : ''}
+            ${Number(entry.image) === 1 ? `<button class="copy-image-btn icon-btn sm" data-image="${entry.id}" aria-label="Copy image">${IMAGE_ICON}</button>` : ''}
             <button class="copy-btn icon-btn sm" aria-label="Copy">${COPY_ICON}</button>
             <div class="entry-menu">
                 <button class="menu-btn icon-btn sm" aria-label="More actions" aria-haspopup="true" aria-expanded="false">${MENU_ICON}</button>
@@ -307,6 +315,10 @@ passkeyInput.addEventListener('keydown', e => {
 saveBtn.addEventListener('click', async () => {
     const text = input.value.trim();
     if (!text && !pastedImage) return;
+    if (pastedImage && pastedImage.size > MAX_IMAGE_SIZE) {
+        await showAlert('Image exceeds the MEDIUMBLOB limit (16 MiB minus 1 byte).');
+        return;
+    }
 
     let res;
     if (pastedImage) {
@@ -314,7 +326,7 @@ saveBtn.addEventListener('click', async () => {
         form.append('image', pastedImage, 'image');
         form.append('text', text);
         // Empty headers so the browser sets the multipart boundary
-        res = await clipitFetch('image.php', 'POST', null, {headers: {}, body: form});
+        res = await clipitFetch('api.php', 'POST', null, {headers: {}, body: form});
     } else {
         res = await clipitFetch('api.php', 'POST', {text});
     }
@@ -326,6 +338,10 @@ saveBtn.addEventListener('click', async () => {
         // Persist returned entries and render from localStorage
         storeEntries(entries);
         render(storeEntries());
+    } else if (res && res.status !== 401) {
+        const error = await res.json();
+        console.error('Failed to save entry:', error);
+        await showAlert(error.error || 'Failed to save entry');
     }
 });
 
@@ -616,14 +632,18 @@ const confirmTitle = document.querySelector('#confirm-title');
 const confirmOkBtn = document.querySelector('#confirm-ok');
 const confirmCancelBtn = document.querySelector('#confirm-cancel');
 
-function confirm(message) {
+function confirm(message, alertOnly = false) {
     return new Promise(resolve => {
         confirmTitle.textContent = message;
+        confirmOkBtn.textContent = alertOnly ? 'OK' : 'Delete';
+        confirmCancelBtn.hidden = alertOnly;
         confirmModal.classList.add('visible');
         confirmOkBtn.focus();
 
         function cleanup(result) {
             confirmModal.classList.remove('visible');
+            confirmOkBtn.textContent = 'Delete';
+            confirmCancelBtn.hidden = false;
             confirmOkBtn.removeEventListener('click', onOk);
             confirmCancelBtn.removeEventListener('click', onCancel);
             confirmModal.removeEventListener('click', onBackdrop);
@@ -645,6 +665,10 @@ function confirm(message) {
         confirmModal.addEventListener('click', onBackdrop);
         document.addEventListener('keydown', onKey);
     });
+}
+
+function showAlert(message) {
+    return confirm(message, true);
 }
 
 // Section: Offline notice, service worker, and theme handling
